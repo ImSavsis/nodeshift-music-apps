@@ -1,32 +1,68 @@
-set -euo pipefail
+set -uo pipefail
 APP="$1"
 OUT="$2"
 BUNDLE="space.nodeshift.music"
 mkdir -p "$OUT"
-DEVICES=("iPhone 16e" "iPhone 17 Pro" "iPhone 17 Pro Max")
-for NAME in "${DEVICES[@]}"; do
-  UDID=$(xcrun simctl list devices available -j | jq -r --arg n "$NAME" '.devices | to_entries[] | select(.key | test("iOS-26")) | .value[] | select(.name == $n) | .udid' | head -1)
-  if [ -z "$UDID" ]; then
-    echo "no simulator for $NAME"
-    continue
-  fi
-  SLUG=$(echo "$NAME" | tr ' ' '-' | tr 'A-Z' 'a-z')
-  xcrun simctl boot "$UDID" || true
-  xcrun simctl bootstatus "$UDID" -b
-  xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
-  xcrun simctl install "$UDID" "$APP"
-  for ROUTE in library playing list playlists favorites import more player lyrics queue; do
-    xcrun simctl terminate "$UDID" "$BUNDLE" || true
-    case "$ROUTE" in
-      library) ARGS=(-nsm-demo) ;;
-      playing) ARGS=(-nsm-demo -nsm-playing) ;;
-      lyrics) ARGS=(-nsm-demo -nsm-route lyrics -nsm-lyrics -nsm-seek 24) ;;
-      *) ARGS=(-nsm-demo -nsm-route "$ROUTE") ;;
-    esac
-    xcrun simctl launch "$UDID" "$BUNDLE" "${ARGS[@]}"
-    sleep 6
-    xcrun simctl io "$UDID" screenshot "$OUT/${SLUG}-${ROUTE}.png"
+
+stamp() {
+  echo "[$(date +%H:%M:%S)] $*"
+}
+
+tmo() {
+  local secs="$1"
+  shift
+  perl -e 'alarm shift; exec @ARGV' "$secs" "$@"
+}
+
+wait_booted() {
+  local udid="$1"
+  local waited=0
+  while [ "$waited" -lt 300 ]; do
+    if xcrun simctl list devices | grep "$udid" | grep -q "(Booted)"; then
+      return 0
+    fi
+    sleep 3
+    waited=$((waited + 3))
   done
-  xcrun simctl shutdown "$UDID" || true
-done
+  return 1
+}
+
+shoot_device() {
+  local name="$1"
+  local routes="$2"
+  local udid
+  udid=$(xcrun simctl list devices available -j | jq -r --arg n "$name" '.devices | to_entries[] | select(.key | test("iOS-26")) | .value[] | select(.name == $n) | .udid' | head -1)
+  if [ -z "$udid" ]; then
+    stamp "no simulator for $name"
+    return
+  fi
+  local slug
+  slug=$(echo "$name" | tr ' ' '-' | tr 'A-Z' 'a-z')
+  stamp "boot $name $udid"
+  tmo 90 xcrun simctl boot "$udid" || true
+  if ! wait_booted "$udid"; then
+    stamp "boot timeout for $name"
+    return
+  fi
+  stamp "booted $name"
+  tmo 30 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+  tmo 180 xcrun simctl install "$udid" "$APP" || return
+  for route in $routes; do
+    case "$route" in
+      library) args="-nsm-demo" ;;
+      playing) args="-nsm-demo -nsm-playing" ;;
+      lyrics) args="-nsm-demo -nsm-route lyrics -nsm-lyrics -nsm-seek 24" ;;
+      *) args="-nsm-demo -nsm-route $route" ;;
+    esac
+    tmo 60 xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" $args > /dev/null || true
+    sleep 5
+    tmo 60 xcrun simctl io "$udid" screenshot "$OUT/${slug}-${route}.png" || true
+    stamp "shot $slug $route"
+  done
+  tmo 60 xcrun simctl shutdown "$udid" || true
+}
+
+shoot_device "iPhone 17 Pro" "library playing list playlists favorites import more storage player lyrics queue"
+shoot_device "iPhone 16e" "library player lyrics more"
+shoot_device "iPhone 17 Pro Max" "library player lyrics more"
 ls -l "$OUT"

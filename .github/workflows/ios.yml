@@ -108,7 +108,7 @@ jobs:
           gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --title "iOS rolling" --notes "rolling build from main"
           gh release upload ios-latest NodeShiftMusic.ipa update.json --clobber
 
-  screens:
+  sim:
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -124,26 +124,31 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
-      - name: Build for simulator
+      - name: Build for testing
         working-directory: ios
         run: |
-          xcodebuild \
-            -project NodeShiftMusic.xcodeproj \
-            -scheme NodeShiftMusic \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build-sim \
-            -clonedSourcePackagesDirPath build-sim/SourcePackages \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build
+          xcodebuild build-for-testing             -project NodeShiftMusic.xcodeproj             -scheme NodeShiftMusic             -configuration Debug             -sdk iphonesimulator             -destination 'platform=iOS Simulator,name=iPhone 17 Pro'             -derivedDataPath build-sim             -clonedSourcePackagesDirPath build-sim/SourcePackages             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""
+
+      - name: Unit tests
+        id: tests
+        continue-on-error: true
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building             -project NodeShiftMusic.xcodeproj             -scheme NodeShiftMusic             -configuration Debug             -sdk iphonesimulator             -destination 'platform=iOS Simulator,name=iPhone 17 Pro'             -derivedDataPath build-sim             CODE_SIGNING_ALLOWED=NO 2>&1 | tee ../test.log | grep -E "Test Case|error:|failed|passed|Executed|XCTAssert" | tail -n 80
 
       - name: Screenshots
+        timeout-minutes: 25
         run: bash tools/ci/shoot.sh ios/build-sim/Build/Products/Debug-iphonesimulator/NodeShiftMusic.app screens
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: screens
-          path: screens
+          name: sim
+          path: |
+            screens
+            test.log
+
+      - name: Fail when tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
