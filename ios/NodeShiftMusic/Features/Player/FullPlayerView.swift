@@ -150,7 +150,7 @@ struct FullPlayerView: View {
         let side = min(size.width * 0.84, size.height * 0.46)
         return VStack(spacing: s(22)) {
             Spacer(minLength: 0)
-            CoverArt(coverName: track?.coverName, radius: Radius.card, maxPixel: 1000)
+            CoverArt(coverName: track?.coverName, motionName: track?.motionName, radius: Radius.card, maxPixel: 1000)
                 .frame(width: side, height: side)
                 .scaleEffect(player.isPlaying ? 1 : 0.92)
                 .animation(Motion.coverSpring, value: player.isPlaying)

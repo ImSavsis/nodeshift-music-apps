@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 func pluralTracks(_ count: Int) -> String {
     let mod10 = count % 10
@@ -15,6 +16,7 @@ func pluralTracks(_ count: Int) -> String {
 struct FavoritesView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
+    @Environment(\.openStorage) private var openStorage
     @Environment(\.s) private var s
 
     var body: some View {
@@ -25,6 +27,12 @@ struct FavoritesView: View {
                 subtitle: list.isEmpty ? "Треки, которые вы отметили" : "\(pluralTracks(list.count)), которые вы отметили"
             )
             .reveal(0)
+            Button(action: openStorage) {
+                ButtonLabel(title: "Скачать лайки с сайта", icon: .cloudDownload)
+            }
+            .buttonStyle(GhostButtonStyle())
+            .padding(.bottom, s(18))
+            .reveal(1)
             if list.isEmpty {
                 Text("В избранном пока пусто. Нажми на сердце у любого трека.")
                     .font(.nsm(.interRegular, s(14)))
@@ -69,6 +77,7 @@ struct PlaylistsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.openStorage) private var openStorage
     @Environment(\.s) private var s
 
     private var albums: [(name: String, tracks: [TrackRecord])] {
@@ -81,6 +90,12 @@ struct PlaylistsView: View {
         ScreenScroll {
             PageHeader(title: "Плейлисты", subtitle: "Ваши подборки")
                 .reveal(0)
+            Button(action: openStorage) {
+                ButtonLabel(title: "Скачать плейлисты с сайта", icon: .cloudDownload)
+            }
+            .buttonStyle(GhostButtonStyle())
+            .padding(.bottom, s(22))
+            .reveal(1)
             LazyVGrid(
                 columns: [
                     GridItem(.flexible(), spacing: s(14), alignment: .top),
@@ -133,60 +148,3 @@ struct PlaylistsView: View {
     }
 }
 
-struct ImportView: View {
-    @Environment(ToastCenter.self) private var toasts
-    @Environment(\.s) private var s
-
-    var body: some View {
-        ScreenScroll {
-            PageHeader(
-                title: "Импорт",
-                subtitle: "mp3, flac, wav, ogg, m4a, архивы и папки. Можно сразу много, всё делается на телефоне."
-            )
-            .reveal(0)
-            VStack(spacing: s(12)) {
-                Icon(name: .uploadCloud, size: s(28), stroke: 1.6)
-                    .foregroundStyle(Palette.muted)
-                Text("Выбери файлы, папки или архивы")
-                    .font(.nsm(.interMedium, s(14)))
-                    .foregroundStyle(Palette.white)
-                    .multilineTextAlignment(.center)
-                Text("НАЗВАНИЕ, ИСПОЛНИТЕЛЬ, АЛЬБОМ И ОБЛОЖКА ПОДТЯНУТСЯ САМИ")
-                    .font(.nsm(.monoRegular, s(10.5)))
-                    .tracking(0.12 * s(10.5))
-                    .foregroundStyle(Palette.dim)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.vertical, s(32))
-            .padding(.horizontal, s(20))
-            .frame(maxWidth: .infinity)
-            .overlay(
-                RoundedRectangle(cornerRadius: s(Radius.card), style: .continuous)
-                    .strokeBorder(Palette.line2, style: StrokeStyle(lineWidth: 1, dash: [7, 6]))
-            )
-            .reveal(1)
-            FlowLayout(spacing: s(10), lineSpacing: s(10)) {
-                Button {
-                    toasts.show("Импорт скоро будет")
-                } label: {
-                    ButtonLabel(title: "Файлы", icon: .fileMusic)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                Button {
-                    toasts.show("Импорт скоро будет")
-                } label: {
-                    ButtonLabel(title: "Папку", icon: .folderUp)
-                }
-                .buttonStyle(GhostButtonStyle())
-                Button {
-                    toasts.show("Импорт скоро будет")
-                } label: {
-                    ButtonLabel(title: "Архив", icon: .archive)
-                }
-                .buttonStyle(GhostButtonStyle())
-            }
-            .padding(.top, s(18))
-            .reveal(2)
-        }
-    }
-}

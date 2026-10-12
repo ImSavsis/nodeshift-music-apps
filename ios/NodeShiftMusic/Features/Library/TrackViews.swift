@@ -36,7 +36,7 @@ struct TrackCard: View {
         VStack(alignment: .leading, spacing: s(12)) {
             ZStack(alignment: .topTrailing) {
                 Button(action: activate) {
-                    CoverArt(coverName: track.coverName)
+                    CoverArt(coverName: track.coverName, motionName: track.motionName)
                         .overlay {
                             ZStack {
                                 Color.black.opacity(isCurrent ? 0.30 : 0)

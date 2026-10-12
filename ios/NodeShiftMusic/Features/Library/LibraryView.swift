@@ -10,6 +10,7 @@ struct LibraryView: View {
         @Bindable var library = library
         let list = library.filtered
         ScreenScroll {
+            UpdateBanner()
             PageHeader(title: "Треки", subtitle: "Вся твоя музыка у тебя на телефоне")
                 .reveal(0)
             SearchField(text: $library.query, placeholder: "Поиск по трекам")

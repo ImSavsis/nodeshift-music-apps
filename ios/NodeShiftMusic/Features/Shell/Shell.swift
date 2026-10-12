@@ -202,6 +202,9 @@ struct MiniPlayer: View {
 
 struct MoreSheet: View {
     @Binding var isPresented: Bool
+    var loggedIn = false
+    var loginTitle = "Войти"
+    var versionLine = ""
     var onSelect: (MoreItem) -> Void
     @Environment(\.s) private var s
 
@@ -252,9 +255,9 @@ struct MoreSheet: View {
                         onSelect(item)
                     } label: {
                         HStack(spacing: s(12)) {
-                            Icon(name: item.icon, size: s(18), stroke: 1.6)
+                            Icon(name: item == .login && loggedIn ? .logOut : item.icon, size: s(18), stroke: 1.6)
                                 .foregroundStyle(Palette.muted)
-                            Text(item.title)
+                            Text(item == .login ? loginTitle : item.title)
                                 .font(.nsm(.interMedium, s(14)))
                                 .foregroundStyle(Palette.white)
                             Spacer()
@@ -265,11 +268,18 @@ struct MoreSheet: View {
                     }
                     .buttonStyle(PressStyle(pressedOpacity: 0.6))
                 }
-                Text("made by savsis with <3")
-                    .font(.nsm(.monoRegular, s(11)))
-                    .foregroundStyle(Palette.dim)
-                    .padding(.top, s(10))
-                    .padding(.bottom, s(14))
+                VStack(spacing: s(4)) {
+                    if !versionLine.isEmpty {
+                        Text(versionLine)
+                            .font(.nsm(.monoRegular, s(11)))
+                            .foregroundStyle(Palette.dim)
+                    }
+                    Text("made by savsis with <3")
+                        .font(.nsm(.monoRegular, s(11)))
+                        .foregroundStyle(Palette.dim)
+                }
+                .padding(.top, s(10))
+                .padding(.bottom, s(14))
             }
             .padding(.horizontal, s(12))
             .padding(.bottom, s(8))

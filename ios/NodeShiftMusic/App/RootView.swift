@@ -4,12 +4,12 @@ struct RootView: View {
     @State private var tab: AppTab = .tracks
     @State private var showMore = false
     @State private var barHeight: CGFloat = 0
-    @State private var library = LibraryStore()
-    @State private var player = PlayerStore()
-    @State private var lyrics = LyricsStore()
-    @State private var toasts = ToastCenter()
+    @State private var showStorage = false
+    @State private var model = AppModel(demo: ProcessInfo.processInfo.arguments.contains("-nsm-demo"))
 
     var body: some View {
+        let library = model.library
+        let player = model.player
         GeometryReader { proxy in
             let scale = Scale.forWidth(proxy.size.width)
             ZStack {
@@ -26,10 +26,24 @@ struct RootView: View {
                 chrome(scale: scale)
                     .zIndex(30)
                 if showMore {
-                    MoreSheet(isPresented: $showMore) { item in
-                        toasts.show(item == .login ? "Вход через SSO скоро будет" : "\(item.title) скоро будет")
+                    MoreSheet(
+                        isPresented: $showMore,
+                        loggedIn: model.site.isLoggedIn,
+                        loginTitle: model.site.isLoggedIn ? "Выйти (\(model.site.user?.handle.map { "@" + $0 } ?? "аккаунт"))" : "Войти",
+                        versionLine: "Версия \(model.updates.currentVersion) (\(model.updates.currentBuild))"
+                    ) { item in
+                        select(item)
                     }
                     .zIndex(61)
+                }
+                if showStorage {
+                    StorageView {
+                        withAnimation(Motion.expoOut(0.32)) {
+                            showStorage = false
+                        }
+                    }
+                    .transition(.move(edge: .trailing))
+                    .zIndex(65)
                 }
                 if player.isFullPlayerOpen {
                     FullPlayerView()
@@ -54,10 +68,19 @@ struct RootView: View {
                     tab = target
                 }
             })
+            .environment(\.openStorage, {
+                withAnimation(Motion.expoOut(0.32)) {
+                    showStorage = true
+                }
+            })
             .environment(library)
             .environment(player)
-            .environment(lyrics)
-            .environment(toasts)
+            .environment(model.lyrics)
+            .environment(model.toasts)
+            .environment(model.importer)
+            .environment(model.site)
+            .environment(model.sync)
+            .environment(model.updates)
         }
         .animation(Motion.page, value: tab)
         .onAppear(perform: bootstrap)
@@ -95,12 +118,31 @@ struct RootView: View {
         }
     }
 
+    private func select(_ item: MoreSheet.MoreItem) {
+        switch item {
+        case .storage:
+            withAnimation(Motion.expoOut(0.32)) {
+                showStorage = true
+            }
+        case .login:
+            if model.site.isLoggedIn {
+                model.site.logout()
+            } else {
+                Task { _ = await model.site.login() }
+            }
+        default:
+            model.toasts.show("\(item.title) скоро будет")
+        }
+    }
+
     private func bootstrap() {
+        guard model.demo else { return }
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("-nsm-demo") {
-            let engine = DemoEngine()
-            player.attach(engine)
-            library.tracks = DemoData.tracks()
+        let library = model.library
+        let player = model.player
+        Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            let sorted = library.tracks.sorted { $0.id < $1.id }
             if let routeIndex = arguments.firstIndex(of: "-nsm-route"), routeIndex + 1 < arguments.count {
                 switch arguments[routeIndex + 1] {
                 case "playlists": tab = .playlists
@@ -108,17 +150,18 @@ struct RootView: View {
                 case "import": tab = .importer
                 case "list": library.changeViewMode(.list)
                 case "more": showMore = true
+                case "storage": showStorage = true
                 case "player", "lyrics", "queue":
-                    if let first = library.tracks.first {
-                        player.play(first, in: library.tracks)
+                    if let first = sorted.first {
+                        player.play(first, in: sorted)
                         player.isFullPlayerOpen = true
                         player.isQueueOpen = arguments[routeIndex + 1] == "queue"
                     }
                 default: break
                 }
             }
-            if arguments.contains("-nsm-playing"), let track = library.tracks.dropFirst(2).first {
-                player.play(track, in: library.tracks)
+            if arguments.contains("-nsm-playing"), let track = sorted.dropFirst(2).first {
+                player.play(track, in: sorted)
             }
             if let seekIndex = arguments.firstIndex(of: "-nsm-seek"),
                seekIndex + 1 < arguments.count,
