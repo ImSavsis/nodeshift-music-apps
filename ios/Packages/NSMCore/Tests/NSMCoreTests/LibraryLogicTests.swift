@@ -28,6 +28,12 @@ final class LibraryLogicTests: XCTestCase {
         XCTAssertEqual(hits.map { $0.kind }, [.sameFile])
     }
 
+    func testExistingIDForHash() {
+        let index = DuplicateIndex([TrackFingerprint(id: "a", artist: "X", title: "Y", fileHash: "abc", format: "flac")])
+        XCTAssertEqual(index.existingID(forHash: "abc"), "a")
+        XCTAssertNil(index.existingID(forHash: "zzz"))
+    }
+
     func testDuplicateSameTrackDifferentFormat() {
         let existing = TrackFingerprint(id: "a", artist: "2Pac", title: "Ratha Be Ya Nigga", durationMs: 250_000, format: "mp3", bitrateKbps: 128)
         let index = DuplicateIndex([existing])

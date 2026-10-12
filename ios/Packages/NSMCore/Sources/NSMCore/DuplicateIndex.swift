@@ -96,6 +96,10 @@ public struct DuplicateIndex: Sendable {
         return abs(a - b) <= tolerance
     }
 
+    public func existingID(forHash hash: String) -> String? {
+        byHash[hash]?.first?.id
+    }
+
     public func matches(for candidate: TrackFingerprint) -> [DuplicateMatch] {
         var seen = Set<String>()
         var result: [DuplicateMatch] = []
