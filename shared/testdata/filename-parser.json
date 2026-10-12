@@ -1,0 +1,549 @@
+[
+  {
+    "label": "all-eyez",
+    "names": [
+      "09 - 2pac - Ratha Be Ya Nigga.flac",
+      "10 - 2pac - All Eyez On Me.flac",
+      "01 - 2pac - Ambitionz Az a Ridah.flac"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 9,
+        "artist": "2pac",
+        "title": "Ratha Be Ya Nigga"
+      },
+      {
+        "disc": null,
+        "track": 10,
+        "artist": "2pac",
+        "title": "All Eyez On Me"
+      },
+      {
+        "disc": null,
+        "track": 1,
+        "artist": "2pac",
+        "title": "Ambitionz Az a Ridah"
+      }
+    ]
+  },
+  {
+    "label": "numbered-title-only",
+    "names": [
+      "01. Intro.flac",
+      "02. Hurt.flac",
+      "03. Dear Mama.flac"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 1,
+        "artist": null,
+        "title": "Intro"
+      },
+      {
+        "disc": null,
+        "track": 2,
+        "artist": null,
+        "title": "Hurt"
+      },
+      {
+        "disc": null,
+        "track": 3,
+        "artist": null,
+        "title": "Dear Mama"
+      }
+    ]
+  },
+  {
+    "label": "disc-track",
+    "names": [
+      "1-05 Dear Mama.flac",
+      "2-09 - 2Pac - Ratha Be Ya Nigga.flac"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": 1,
+        "track": 5,
+        "artist": null,
+        "title": "Dear Mama"
+      },
+      {
+        "disc": 2,
+        "track": 9,
+        "artist": "2Pac",
+        "title": "Ratha Be Ya Nigga"
+      }
+    ]
+  },
+  {
+    "label": "numeric-artists",
+    "names": [
+      "50 Cent - In Da Club.mp3",
+      "21 Savage - a lot.mp3",
+      "2pac - Changes.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "50 Cent",
+        "title": "In Da Club"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "21 Savage",
+        "title": "a lot"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "2pac",
+        "title": "Changes"
+      }
+    ]
+  },
+  {
+    "label": "311-band",
+    "names": [
+      "311 - Down.mp3",
+      "311 - Amber.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "311",
+        "title": "Down"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "311",
+        "title": "Amber"
+      }
+    ]
+  },
+  {
+    "label": "underscore-style",
+    "names": [
+      "03_Artist_-_Some_Title.mp3",
+      "04_Artist_-_Other_Title.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": 3,
+        "artist": "Artist",
+        "title": "Some Title"
+      },
+      {
+        "disc": null,
+        "track": 4,
+        "artist": "Artist",
+        "title": "Other Title"
+      }
+    ]
+  },
+  {
+    "label": "mixed-junk",
+    "names": [
+      "Metallica - One [FLAC].flac",
+      "Tupac – Hit Em Up.mp3",
+      "A-ha - Take On Me.mp3",
+      "Jay-Z - 99 Problems.mp3",
+      "Song_Title_Only.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Metallica",
+        "title": "One"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Tupac",
+        "title": "Hit Em Up"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "A-ha",
+        "title": "Take On Me"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Jay-Z",
+        "title": "99 Problems"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": null,
+        "title": "Song Title Only"
+      }
+    ]
+  },
+  {
+    "label": "partial-drop",
+    "names": [
+      "09 - 2pac - Ratha Be Ya Nigga.flac",
+      "10 - 2pac - All Eyez On Me.flac"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": 9,
+        "artist": "2pac",
+        "title": "Ratha Be Ya Nigga"
+      },
+      {
+        "disc": null,
+        "track": 10,
+        "artist": "2pac",
+        "title": "All Eyez On Me"
+      }
+    ]
+  },
+  {
+    "label": "unpadded-sequence",
+    "names": [
+      "1. Intro.flac",
+      "2. Hurt.flac",
+      "3. Dear Mama.flac",
+      "10. Changes.flac"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 1,
+        "artist": null,
+        "title": "Intro"
+      },
+      {
+        "disc": null,
+        "track": 2,
+        "artist": null,
+        "title": "Hurt"
+      },
+      {
+        "disc": null,
+        "track": 3,
+        "artist": null,
+        "title": "Dear Mama"
+      },
+      {
+        "disc": null,
+        "track": 10,
+        "artist": null,
+        "title": "Changes"
+      }
+    ]
+  },
+  {
+    "label": "single-ambiguous",
+    "names": [
+      "7 - Hurt.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "7",
+        "title": "Hurt"
+      }
+    ]
+  },
+  {
+    "label": "keep-version",
+    "names": [
+      "12 - Tupac Shakur - Life Goes On (Remastered 2005).flac",
+      "13 - Tupac Shakur - Hit 'Em Up (Dirty).flac",
+      "14 - Tupac Shakur - Changes.flac"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 12,
+        "artist": "Tupac Shakur",
+        "title": "Life Goes On (Remastered 2005)"
+      },
+      {
+        "disc": null,
+        "track": 13,
+        "artist": "Tupac Shakur",
+        "title": "Hit 'Em Up (Dirty)"
+      },
+      {
+        "disc": null,
+        "track": 14,
+        "artist": "Tupac Shakur",
+        "title": "Changes"
+      }
+    ]
+  },
+  {
+    "label": "cyrillic",
+    "names": [
+      "05 - Скриптонит - Положение.mp3",
+      "06 - Скриптонит - Мультибрендовый.mp3",
+      "07 - Скриптонит - Притон.mp3"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 5,
+        "artist": "Скриптонит",
+        "title": "Положение"
+      },
+      {
+        "disc": null,
+        "track": 6,
+        "artist": "Скриптонит",
+        "title": "Мультибрендовый"
+      },
+      {
+        "disc": null,
+        "track": 7,
+        "artist": "Скриптонит",
+        "title": "Притон"
+      }
+    ]
+  },
+  {
+    "label": "feat-in-title",
+    "names": [
+      "01 - Eminem - Lose Yourself (feat. Someone).flac",
+      "02 - Eminem - Without Me.flac",
+      "03 - Eminem - Stan.flac"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 1,
+        "artist": "Eminem",
+        "title": "Lose Yourself (feat. Someone)"
+      },
+      {
+        "disc": null,
+        "track": 2,
+        "artist": "Eminem",
+        "title": "Without Me"
+      },
+      {
+        "disc": null,
+        "track": 3,
+        "artist": "Eminem",
+        "title": "Stan"
+      }
+    ]
+  },
+  {
+    "label": "dot-no-space",
+    "names": [
+      "01.Intro.mp3",
+      "02.Hurt.mp3",
+      "03.Dear Mama.mp3"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 1,
+        "artist": null,
+        "title": "Intro"
+      },
+      {
+        "disc": null,
+        "track": 2,
+        "artist": null,
+        "title": "Hurt"
+      },
+      {
+        "disc": null,
+        "track": 3,
+        "artist": null,
+        "title": "Dear Mama"
+      }
+    ]
+  },
+  {
+    "label": "no-number-word",
+    "names": [
+      "Track 03.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": null,
+        "title": "Track 03"
+      }
+    ]
+  },
+  {
+    "label": "single-padded",
+    "names": [
+      "03 - Artist - Song.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": 3,
+        "artist": "Artist",
+        "title": "Song"
+      }
+    ]
+  },
+  {
+    "label": "single-underscore",
+    "names": [
+      "My_Song.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": null,
+        "title": "My_Song"
+      }
+    ]
+  },
+  {
+    "label": "upper-ext",
+    "names": [
+      "Artist - Title.FLAC",
+      "Artist - Other.Mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Artist",
+        "title": "Title"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Artist",
+        "title": "Other"
+      }
+    ]
+  },
+  {
+    "label": "site-tag",
+    "names": [
+      "Artist - Title [www.example.com].mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Artist",
+        "title": "Title"
+      }
+    ]
+  },
+  {
+    "label": "em-dash",
+    "names": [
+      "Artist — Title.mp3",
+      "Artist – Other Title.mp3"
+    ],
+    "numbered": false,
+    "expected": [
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Artist",
+        "title": "Title"
+      },
+      {
+        "disc": null,
+        "track": null,
+        "artist": "Artist",
+        "title": "Other Title"
+      }
+    ]
+  },
+  {
+    "label": "multi-dash-title",
+    "names": [
+      "04 - Artist - Title - Live.mp3",
+      "05 - Artist - Other.mp3",
+      "06 - Artist - Third.mp3"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 4,
+        "artist": "Artist",
+        "title": "Title - Live"
+      },
+      {
+        "disc": null,
+        "track": 5,
+        "artist": "Artist",
+        "title": "Other"
+      },
+      {
+        "disc": null,
+        "track": 6,
+        "artist": "Artist",
+        "title": "Third"
+      }
+    ]
+  },
+  {
+    "label": "opus-ogg-aac",
+    "names": [
+      "01 - A - One.opus",
+      "02 - A - Two.ogg",
+      "03 - A - Three.aac"
+    ],
+    "numbered": true,
+    "expected": [
+      {
+        "disc": null,
+        "track": 1,
+        "artist": "A",
+        "title": "One"
+      },
+      {
+        "disc": null,
+        "track": 2,
+        "artist": "A",
+        "title": "Two"
+      },
+      {
+        "disc": null,
+        "track": 3,
+        "artist": "A",
+        "title": "Three"
+      }
+    ]
+  }
+]
