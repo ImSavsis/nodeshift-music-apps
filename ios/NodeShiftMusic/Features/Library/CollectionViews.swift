@@ -1,0 +1,192 @@
+import SwiftUI
+
+func pluralTracks(_ count: Int) -> String {
+    let mod10 = count % 10
+    let mod100 = count % 100
+    if mod10 == 1 && mod100 != 11 {
+        return "\(count) трек"
+    }
+    if (2...4).contains(mod10) && !(12...14).contains(mod100) {
+        return "\(count) трека"
+    }
+    return "\(count) треков"
+}
+
+struct FavoritesView: View {
+    @Environment(LibraryStore.self) private var library
+    @Environment(PlayerStore.self) private var player
+    @Environment(\.s) private var s
+
+    var body: some View {
+        let list = library.favorites
+        ScreenScroll {
+            PageHeader(
+                title: "Избранное",
+                subtitle: list.isEmpty ? "Треки, которые вы отметили" : "\(pluralTracks(list.count)), которые вы отметили"
+            )
+            .reveal(0)
+            if list.isEmpty {
+                Text("В избранном пока пусто. Нажми на сердце у любого трека.")
+                    .font(.nsm(.interRegular, s(14)))
+                    .foregroundStyle(Palette.dim)
+                    .reveal(1)
+            } else {
+                HStack(spacing: s(10)) {
+                    Button {
+                        if let first = list.first {
+                            player.shuffle = false
+                            player.play(first, in: list)
+                        }
+                    } label: {
+                        ButtonLabel(title: "Слушать", icon: .play)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    Button {
+                        let shuffled = list.shuffled()
+                        if let first = shuffled.first {
+                            player.shuffle = true
+                            player.play(first, in: shuffled)
+                        }
+                    } label: {
+                        ButtonLabel(title: "Перемешать", icon: .shuffle)
+                    }
+                    .buttonStyle(GhostButtonStyle())
+                }
+                .padding(.bottom, s(22))
+                .reveal(1)
+                LazyVStack(spacing: s(4)) {
+                    ForEach(Array(list.enumerated()), id: \.element.id) { index, track in
+                        TrackRow(track: track, queue: list)
+                            .stagger(index, rise: 10, step: 0.03)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct PlaylistsView: View {
+    @Environment(LibraryStore.self) private var library
+    @Environment(PlayerStore.self) private var player
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(\.s) private var s
+
+    private var albums: [(name: String, tracks: [TrackRecord])] {
+        Dictionary(grouping: library.tracks.filter { $0.album != nil }, by: { $0.album ?? "" })
+            .map { (name: $0.key, tracks: $0.value) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var body: some View {
+        ScreenScroll {
+            PageHeader(title: "Плейлисты", subtitle: "Ваши подборки")
+                .reveal(0)
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: s(14), alignment: .top),
+                    GridItem(.flexible(), spacing: s(14), alignment: .top),
+                ],
+                spacing: s(24)
+            ) {
+                Button {
+                    toasts.show("Плейлисты скоро будут")
+                } label: {
+                    VStack(spacing: s(10)) {
+                        Icon(name: .plus, size: s(24), stroke: 1.6)
+                        Text("Новый плейлист")
+                            .font(.nsm(.interMedium, s(13.5)))
+                    }
+                    .foregroundStyle(Palette.muted)
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: s(Radius.tile), style: .continuous)
+                            .strokeBorder(Palette.line2, style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
+                    )
+                }
+                .buttonStyle(PressStyle(pressedOpacity: 0.7))
+                ForEach(Array(albums.enumerated()), id: \.element.name) { index, album in
+                    Button {
+                        if let first = album.tracks.first {
+                            player.shuffle = false
+                            player.play(first, in: album.tracks)
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: s(12)) {
+                            CoverArt(coverName: album.tracks.first?.coverName)
+                            VStack(alignment: .leading, spacing: s(2)) {
+                                Text(album.name)
+                                    .font(.nsm(.interMedium, s(14)))
+                                    .foregroundStyle(Palette.white)
+                                    .lineLimit(1)
+                                Text(pluralTracks(album.tracks.count))
+                                    .font(.nsm(.monoRegular, s(11)))
+                                    .foregroundStyle(Palette.dim)
+                            }
+                        }
+                    }
+                    .buttonStyle(PressStyle(pressedOpacity: 0.9))
+                    .stagger(index + 1, rise: 16, step: 0.05)
+                }
+            }
+        }
+    }
+}
+
+struct ImportView: View {
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(\.s) private var s
+
+    var body: some View {
+        ScreenScroll {
+            PageHeader(
+                title: "Импорт",
+                subtitle: "mp3, flac, wav, ogg, m4a, архивы и папки. Можно сразу много, всё делается на телефоне."
+            )
+            .reveal(0)
+            VStack(spacing: s(12)) {
+                Icon(name: .uploadCloud, size: s(28), stroke: 1.6)
+                    .foregroundStyle(Palette.muted)
+                Text("Выбери файлы, папки или архивы")
+                    .font(.nsm(.interMedium, s(14)))
+                    .foregroundStyle(Palette.white)
+                    .multilineTextAlignment(.center)
+                Text("НАЗВАНИЕ, ИСПОЛНИТЕЛЬ, АЛЬБОМ И ОБЛОЖКА ПОДТЯНУТСЯ САМИ")
+                    .font(.nsm(.monoRegular, s(10.5)))
+                    .tracking(0.12 * s(10.5))
+                    .foregroundStyle(Palette.dim)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.vertical, s(32))
+            .padding(.horizontal, s(20))
+            .frame(maxWidth: .infinity)
+            .overlay(
+                RoundedRectangle(cornerRadius: s(Radius.card), style: .continuous)
+                    .strokeBorder(Palette.line2, style: StrokeStyle(lineWidth: 1, dash: [7, 6]))
+            )
+            .reveal(1)
+            FlowLayout(spacing: s(10), lineSpacing: s(10)) {
+                Button {
+                    toasts.show("Импорт скоро будет")
+                } label: {
+                    ButtonLabel(title: "Файлы", icon: .fileMusic)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                Button {
+                    toasts.show("Импорт скоро будет")
+                } label: {
+                    ButtonLabel(title: "Папку", icon: .folderUp)
+                }
+                .buttonStyle(GhostButtonStyle())
+                Button {
+                    toasts.show("Импорт скоро будет")
+                } label: {
+                    ButtonLabel(title: "Архив", icon: .archive)
+                }
+                .buttonStyle(GhostButtonStyle())
+            }
+            .padding(.top, s(18))
+            .reveal(2)
+        }
+    }
+}
