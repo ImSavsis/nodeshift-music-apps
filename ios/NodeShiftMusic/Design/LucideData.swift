@@ -46,7 +46,7 @@ enum LucideName: String, CaseIterable, Sendable {
     case pencil
     case play
     case plus
-    case repeat
+    case repeatAll
     case repeat1
     case search
     case shuffle
@@ -308,7 +308,7 @@ enum LucideName: String, CaseIterable, Sendable {
                 .path("M5 12h14"),
                 .path("M12 5v14"),
             ]
-        case .repeat:
+        case .repeatAll:
             return [
                 .path("m17 2 4 4-4 4"),
                 .path("M3 11v-1a4 4 0 0 1 4-4h14"),
