@@ -45,3 +45,24 @@ jobs:
         with:
           name: core-test-report
           path: android/core/build/reports/tests
+
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 8.14.6
+
+      - name: Build debug
+        working-directory: android
+        env:
+          NSM_BUILD: ${{ github.run_number }}
+        run: gradle :app:assembleDebug --console=plain
