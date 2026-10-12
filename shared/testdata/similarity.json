@@ -1,0 +1,226 @@
+[
+  {
+    "name": "empty-both",
+    "mode": "chars",
+    "a": "",
+    "b": "",
+    "ratio": 1.0
+  },
+  {
+    "name": "empty-left",
+    "mode": "chars",
+    "a": "",
+    "b": "abc",
+    "ratio": 0.0
+  },
+  {
+    "name": "empty-right",
+    "mode": "chars",
+    "a": "abc",
+    "b": "",
+    "ratio": 0.0
+  },
+  {
+    "name": "identical",
+    "mode": "chars",
+    "a": "same text",
+    "b": "same text",
+    "ratio": 1.0
+  },
+  {
+    "name": "docs-example",
+    "mode": "chars",
+    "a": "abcd",
+    "b": "bcde",
+    "ratio": 0.75
+  },
+  {
+    "name": "single-char",
+    "mode": "chars",
+    "a": "a",
+    "b": "b",
+    "ratio": 0.0
+  },
+  {
+    "name": "transposed",
+    "mode": "chars",
+    "a": "abcdef",
+    "b": "abdcef",
+    "ratio": 0.833333333
+  },
+  {
+    "name": "prefix",
+    "mode": "chars",
+    "a": "hello",
+    "b": "hello world",
+    "ratio": 0.625
+  },
+  {
+    "name": "repeat",
+    "mode": "chars",
+    "a": "aaaa",
+    "b": "aa",
+    "ratio": 0.666666667
+  },
+  {
+    "name": "title-close",
+    "mode": "chars",
+    "a": "ratha be ya nigga",
+    "b": "ratha be ya nigga remastered",
+    "ratio": 0.755555556
+  },
+  {
+    "name": "title-typo",
+    "mode": "chars",
+    "a": "all eyez on me",
+    "b": "all eyes on me",
+    "ratio": 0.928571429
+  },
+  {
+    "name": "artist",
+    "mode": "chars",
+    "a": "2pac",
+    "b": "tupac",
+    "ratio": 0.666666667
+  },
+  {
+    "name": "cyrillic",
+    "mode": "chars",
+    "a": "я иду по пустым улицам где фонари гаснут один за другим и город засыпает",
+    "b": "я иду по пустым улицам где фонари гаснут один за другим и город уже спит",
+    "ratio": 0.930555556
+  },
+  {
+    "name": "emoji",
+    "mode": "chars",
+    "a": "a😀b😀c",
+    "b": "a😀c",
+    "ratio": 0.75
+  },
+  {
+    "name": "chorus-same",
+    "mode": "chars",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "ratio": 1.0
+  },
+  {
+    "name": "chorus-punct",
+    "mode": "chars",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nHold the silence, like a fragile coin\nspin it in the palm of a tired sky.\nnothing here is ever really lost!\nonly waiting for the morning to arrive\nHold the silence, like a fragile coin\nspin it in the palm of a tired sky.\nnothing here is ever really lost!\nonly waiting for the morning to arrive",
+    "ratio": 0.989177489
+  },
+  {
+    "name": "chorus-trunc",
+    "mode": "chars",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin",
+    "ratio": 0.868064118
+  },
+  {
+    "name": "chorus-shuffled",
+    "mode": "chars",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "nothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nneon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky",
+    "ratio": 0.529411765
+  },
+  {
+    "name": "chorus-unrelated",
+    "mode": "chars",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune ",
+    "ratio": 0.222910217
+  },
+  {
+    "name": "identical-words",
+    "mode": "words",
+    "a": "same text",
+    "b": "same text",
+    "ratio": 1.0
+  },
+  {
+    "name": "docs-example-words",
+    "mode": "words",
+    "a": "abcd",
+    "b": "bcde",
+    "ratio": 0.0
+  },
+  {
+    "name": "transposed-words",
+    "mode": "words",
+    "a": "abcdef",
+    "b": "abdcef",
+    "ratio": 0.0
+  },
+  {
+    "name": "prefix-words",
+    "mode": "words",
+    "a": "hello",
+    "b": "hello world",
+    "ratio": 0.666666667
+  },
+  {
+    "name": "title-close-words",
+    "mode": "words",
+    "a": "ratha be ya nigga",
+    "b": "ratha be ya nigga remastered",
+    "ratio": 0.888888889
+  },
+  {
+    "name": "title-typo-words",
+    "mode": "words",
+    "a": "all eyez on me",
+    "b": "all eyes on me",
+    "ratio": 0.75
+  },
+  {
+    "name": "artist-words",
+    "mode": "words",
+    "a": "2pac",
+    "b": "tupac",
+    "ratio": 0.0
+  },
+  {
+    "name": "cyrillic-words",
+    "mode": "words",
+    "a": "я иду по пустым улицам где фонари гаснут один за другим и город засыпает",
+    "b": "я иду по пустым улицам где фонари гаснут один за другим и город уже спит",
+    "ratio": 0.896551724
+  },
+  {
+    "name": "chorus-same-words",
+    "mode": "words",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "ratio": 1.0
+  },
+  {
+    "name": "chorus-punct-words",
+    "mode": "words",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nHold the silence, like a fragile coin\nspin it in the palm of a tired sky.\nnothing here is ever really lost!\nonly waiting for the morning to arrive\nHold the silence, like a fragile coin\nspin it in the palm of a tired sky.\nnothing here is ever really lost!\nonly waiting for the morning to arrive",
+    "ratio": 0.906976744
+  },
+  {
+    "name": "chorus-trunc-words",
+    "mode": "words",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin",
+    "ratio": 0.853333333
+  },
+  {
+    "name": "chorus-shuffled-words",
+    "mode": "words",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "nothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nneon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky",
+    "ratio": 0.511627907
+  },
+  {
+    "name": "chorus-unrelated-words",
+    "mode": "words",
+    "a": "neon rivers hum beneath the sleeping town\nevery window holds a quiet constellation\nwe keep walking where the streetlights bend\ncounting echoes that the night forgot to end\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive\nhold the silence like a fragile coin\nspin it in the palm of a tired sky\nnothing here is ever really lost\nonly waiting for the morning to arrive",
+    "b": "paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune paper boats drift across a lazy afternoon while the radio hums an old forgotten tune ",
+    "ratio": 0.102272727
+  }
+]

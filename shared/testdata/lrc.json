@@ -1,0 +1,94 @@
+[
+  {
+    "name": "basic",
+    "lrc": "[00:12.50]first line\n[00:15.00]second line\n[00:20.25]third line",
+    "expected": [
+      {
+        "time": 12.5,
+        "text": "first line"
+      },
+      {
+        "time": 15,
+        "text": "second line"
+      },
+      {
+        "time": 20.25,
+        "text": "third line"
+      }
+    ]
+  },
+  {
+    "name": "unordered-and-multi",
+    "lrc": "[01:00.00][00:30.50]chorus line\n[00:10.00]verse line",
+    "expected": [
+      {
+        "time": 10,
+        "text": "verse line"
+      },
+      {
+        "time": 30.5,
+        "text": "chorus line"
+      },
+      {
+        "time": 60,
+        "text": "chorus line"
+      }
+    ]
+  },
+  {
+    "name": "empty-lines-and-meta",
+    "lrc": "[ar:Someone]\n[ti:Something]\n\n[00:05.00]\n[00:06.00]kept\r\n[00:07.10]also kept",
+    "expected": [
+      {
+        "time": 6,
+        "text": "kept"
+      },
+      {
+        "time": 7.1,
+        "text": "also kept"
+      }
+    ]
+  },
+  {
+    "name": "colon-fraction",
+    "lrc": "[00:01:50]colon fraction\n[00:02.5]one digit",
+    "expected": [
+      {
+        "time": 1.5,
+        "text": "colon fraction"
+      },
+      {
+        "time": 2.5,
+        "text": "one digit"
+      }
+    ]
+  },
+  {
+    "name": "three-digit-fraction",
+    "lrc": "[00:01.123]precise\n[00:02.999]precise two",
+    "expected": [
+      {
+        "time": 1.123,
+        "text": "precise"
+      },
+      {
+        "time": 2.999,
+        "text": "precise two"
+      }
+    ]
+  },
+  {
+    "name": "cyrillic",
+    "lrc": "[00:03.00]привет мир\n[00:06.40]как дела",
+    "expected": [
+      {
+        "time": 3,
+        "text": "привет мир"
+      },
+      {
+        "time": 6.4,
+        "text": "как дела"
+      }
+    ]
+  }
+]
