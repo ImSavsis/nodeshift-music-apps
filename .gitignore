@@ -13,3 +13,5 @@ DerivedData/
 *.aab
 *.exe
 node_modules/
+build-sim/
+screens/
