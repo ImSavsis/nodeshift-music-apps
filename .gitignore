@@ -1,0 +1,15 @@
+.claude/
+.DS_Store
+Thumbs.db
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+build/
+DerivedData/
+.build/
+.swiftpm/
+*.ipa
+*.apk
+*.aab
+*.exe
+node_modules/
