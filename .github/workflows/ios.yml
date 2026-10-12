@@ -1,0 +1,108 @@
+name: ios
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ios/**
+      - shared/**
+      - .github/workflows/ios.yml
+  pull_request:
+    paths:
+      - ios/**
+      - shared/**
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+
+      - name: Core tests
+        working-directory: ios/Packages/NSMCore
+        run: swift test
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build unsigned
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project NodeShiftMusic.xcodeproj \
+            -scheme NodeShiftMusic \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build
+
+      - name: Package ipa
+        working-directory: ios
+        run: |
+          APP=build/Build/Products/Release-iphoneos/NodeShiftMusic.app
+          test -d "$APP"
+          rm -rf Payload NodeShiftMusic.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry NodeShiftMusic.ipa Payload
+          ls -l NodeShiftMusic.ipa
+
+      - name: Manifest
+        working-directory: ios
+        run: |
+          VERSION=$(grep -m1 MARKETING_VERSION project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          SIZE=$(stat -f%z NodeShiftMusic.ipa)
+          SHA=$(shasum -a 256 NodeShiftMusic.ipa | cut -d' ' -f1)
+          NOTES=$(git log -1 --pretty=%s)
+          jq -n \
+            --arg version "$VERSION" \
+            --argjson build ${{ github.run_number }} \
+            --arg commit "$GITHUB_SHA" \
+            --argjson size "$SIZE" \
+            --arg sha256 "$SHA" \
+            --arg notes "$NOTES" \
+            --arg builtAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{platform: "ios", version: $version, build: $build, commit: $commit, file: "NodeShiftMusic.ipa", size: $size, sha256: $sha256, minOS: "17.0", notes: $notes, builtAt: $builtAt}' > update.json
+          cat update.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NodeShiftMusic-ipa
+          path: |
+            ios/NodeShiftMusic.ipa
+            ios/update.json
+
+      - name: Publish rolling release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        working-directory: ios
+        run: |
+          gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --title "iOS rolling" --notes "rolling build from main"
+          gh release upload ios-latest NodeShiftMusic.ipa update.json --clobber
