@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Observation
 
 enum LibrarySort: String, CaseIterable, Sendable {
@@ -43,9 +44,31 @@ final class LibraryStore {
     var formatFilter: FormatFilter = .all
     var viewMode: LibraryViewMode = .grid
     var menuTrack: TrackRecord?
+    private(set) var loaded = false
+
+    @ObservationIgnored private var database: AppDatabase?
+    @ObservationIgnored private var observation: Task<Void, Never>?
 
     init() {
         viewMode = LibraryViewMode(rawValue: UserDefaults.standard.string(forKey: "nsm_view") ?? "") ?? .grid
+    }
+
+    func attach(_ database: AppDatabase) {
+        self.database = database
+        observation?.cancel()
+        observation = Task { [weak self] in
+            let stream = ValueObservation
+                .tracking { db in try TrackRecord.fetchAll(db) }
+                .values(in: database.queue)
+            do {
+                for try await list in stream {
+                    self?.tracks = list
+                    self?.loaded = true
+                }
+            } catch {
+                self?.loaded = true
+            }
+        }
     }
 
     func changeViewMode(_ mode: LibraryViewMode) {
@@ -97,12 +120,36 @@ final class LibraryStore {
 
     func toggleFavorite(_ id: String) {
         guard let index = tracks.firstIndex(where: { $0.id == id }) else { return }
-        tracks[index].isFavorite.toggle()
+        let value = !tracks[index].isFavorite
+        if let database {
+            try? database.setFavorite(id: id, value: value)
+        } else {
+            tracks[index].isFavorite = value
+        }
     }
 
     func markPlayed(_ id: String) {
-        guard let index = tracks.firstIndex(where: { $0.id == id }) else { return }
-        tracks[index].lastPlayedAt = Date()
-        tracks[index].playCount += 1
+        if let database {
+            try? database.markPlayed(id: id, at: Date())
+        } else if let index = tracks.firstIndex(where: { $0.id == id }) {
+            tracks[index].lastPlayedAt = Date()
+            tracks[index].playCount += 1
+        }
+    }
+
+    func delete(_ track: TrackRecord) {
+        try? FileManager.default.removeItem(at: track.fileURL)
+        let others = tracks.filter { $0.id != track.id }
+        if let cover = track.coverName, !others.contains(where: { $0.coverName == cover }) {
+            try? FileManager.default.removeItem(at: AppPaths.coverURL(cover))
+        }
+        if let motion = track.motionName, !others.contains(where: { $0.motionName == motion }) {
+            try? FileManager.default.removeItem(at: AppPaths.motionURL(motion))
+        }
+        if let database {
+            try? database.deleteTrack(id: track.id)
+        } else {
+            tracks.removeAll { $0.id == track.id }
+        }
     }
 }
