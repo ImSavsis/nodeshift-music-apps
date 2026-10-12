@@ -15,3 +15,10 @@ DerivedData/
 node_modules/
 build-sim/
 screens/
+.gradle/
+local.properties
+*.jks
+*.keystore
+.idea/
+captures/
+.cxx/
