@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "NodeShiftMusic"
 
 include(":core")
+include(":app")
