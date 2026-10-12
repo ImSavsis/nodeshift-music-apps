@@ -1,0 +1,134 @@
+[
+  {
+    "seed": "",
+    "hash": 0,
+    "duration": 18,
+    "delay": 0,
+    "shiftX": -1.5,
+    "shiftY": -1,
+    "originX": 30,
+    "originY": 30,
+    "sheenDelay": 0
+  },
+  {
+    "seed": "a",
+    "hash": 97,
+    "duration": 24,
+    "delay": -6,
+    "shiftX": 2.1,
+    "shiftY": -1,
+    "originX": 30,
+    "originY": 30,
+    "sheenDelay": -1
+  },
+  {
+    "seed": "cover.jpg",
+    "hash": 1978606890,
+    "duration": 18,
+    "delay": -10,
+    "shiftX": -1.5,
+    "shiftY": 1.5,
+    "originX": 43,
+    "originY": 48,
+    "sheenDelay": -3
+  },
+  {
+    "seed": "4f9c1b2e-77aa-4c1d-9d3b-0a1b2c3d4e5f.jpg",
+    "hash": 3233143393,
+    "duration": 30,
+    "delay": 14,
+    "shiftX": 2.1,
+    "shiftY": -0.5,
+    "originX": 0,
+    "originY": -5,
+    "sheenDelay": 3
+  },
+  {
+    "seed": "9b2f6e0a-1c3d-4e5f-8a7b-6c5d4e3f2a1b.png",
+    "hash": 156797027,
+    "duration": 28,
+    "delay": -14,
+    "shiftX": 2.7,
+    "shiftY": 2,
+    "originX": 38,
+    "originY": 30,
+    "sheenDelay": 0
+  },
+  {
+    "seed": "Скриптонит - Положение.webp",
+    "hash": 3641648487,
+    "duration": 27,
+    "delay": 6,
+    "shiftX": 1.5,
+    "shiftY": 0.5,
+    "originX": 3,
+    "originY": 8,
+    "sheenDelay": 1
+  },
+  {
+    "seed": "very-long-cover-file-name-with-lots-of-characters-1234567890-abcdefghijklmnopqrstuvwxyz.jpeg",
+    "hash": 254598889,
+    "duration": 30,
+    "delay": -10,
+    "shiftX": 2.1,
+    "shiftY": -1,
+    "originX": 36,
+    "originY": 67,
+    "sheenDelay": -8
+  },
+  {
+    "seed": "ffffffff.jpg",
+    "hash": 4154726387,
+    "duration": 24,
+    "delay": 17,
+    "shiftX": 2.7,
+    "shiftY": 0,
+    "originX": 13,
+    "originY": -9,
+    "sheenDelay": 8
+  },
+  {
+    "seed": "zzzzzzzzzzzzzzzzzzzz",
+    "hash": 1718487168,
+    "duration": 26,
+    "delay": -8,
+    "shiftX": -1.5,
+    "shiftY": -1,
+    "originX": 30,
+    "originY": 62,
+    "sheenDelay": -6
+  },
+  {
+    "seed": "0000000000.jpg",
+    "hash": 3271074547,
+    "duration": 18,
+    "delay": 17,
+    "shiftX": 2.1,
+    "shiftY": 1,
+    "originX": 8,
+    "originY": 16,
+    "sheenDelay": 6
+  },
+  {
+    "seed": "emoji-😀-name.jpg",
+    "hash": 656797729,
+    "duration": 21,
+    "delay": -18,
+    "shiftX": 2.1,
+    "shiftY": -1,
+    "originX": 46,
+    "originY": 61,
+    "sheenDelay": -7
+  },
+  {
+    "seed": "UPPER_lower_123.png",
+    "hash": 3926743090,
+    "duration": 28,
+    "delay": 13,
+    "shiftX": -2.1,
+    "shiftY": 0,
+    "originX": 14,
+    "originY": 11,
+    "sheenDelay": 2
+  }
+]
