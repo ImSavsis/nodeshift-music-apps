@@ -101,6 +101,9 @@
         if (!response.ok) return null;
         return response.json();
       })
+      .then(function (manifest) {
+        return manifest && manifest.available !== false ? manifest : null;
+      })
       .catch(function () {
         return null;
       });

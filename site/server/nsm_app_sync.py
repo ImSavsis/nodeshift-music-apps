@@ -86,17 +86,22 @@ def download(url, expected_sha, expected_size, target):
 
 def sync(platform, canonical):
     manifest = fetch_json(release_url(platform, "update.json"))
+    manifest_path = os.path.join(ROOT, "update", platform + ".json")
     if manifest is None:
+        if not os.path.exists(manifest_path):
+            os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+            placeholder = {"platform": platform, "available": False}
+            atomic_write(manifest_path, (json.dumps(placeholder, indent=2) + chr(10)).encode("utf-8"))
         print("%s: no release yet" % platform)
         return
     for key in ("file", "size", "sha256", "version"):
         if key not in manifest:
             raise ValueError("%s: manifest missing %s" % (platform, key))
-    manifest_path = os.path.join(ROOT, "update", platform + ".json")
     binary_path = os.path.join(ROOT, "bin", platform, canonical)
     current = read_local(manifest_path)
     if (
         current
+        and current.get("available") is not False
         and current.get("sha256") == manifest["sha256"]
         and current.get("build") == manifest.get("build")
         and os.path.exists(binary_path)
