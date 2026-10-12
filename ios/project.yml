@@ -80,6 +80,17 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: "NO"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
+  NodeShiftMusicTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: NodeShiftMusicTests
+    dependencies:
+      - target: NodeShiftMusic
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+        PRODUCT_BUNDLE_IDENTIFIER: space.nodeshift.music.tests
 schemes:
   NodeShiftMusic:
     build:
@@ -87,5 +98,9 @@ schemes:
         NodeShiftMusic: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - NodeShiftMusicTests
     archive:
       config: Release
