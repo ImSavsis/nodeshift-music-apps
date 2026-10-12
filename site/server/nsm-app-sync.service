@@ -1,0 +1,15 @@
+[Unit]
+Description=NodeShift Music app release sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=nsmapp
+Group=nsmapp
+ExecStart=/usr/bin/python3 /opt/nsm-app-sync/nsm_app_sync.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/nsm-app
