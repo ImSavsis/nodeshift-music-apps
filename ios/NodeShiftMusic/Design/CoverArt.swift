@@ -52,6 +52,7 @@ final class CoverImageLoader: @unchecked Sendable {
 
 struct CoverArt: View {
     let coverName: String?
+    var motionName: String?
     var radius: CGFloat = Radius.tile
     var live = true
     var maxPixel = 480
@@ -75,6 +76,10 @@ struct CoverArt: View {
                             artwork(image, size: proxy.size)
                         } else {
                             fallback
+                        }
+                        if let motionName, FileManager.default.fileExists(atPath: AppPaths.motionURL(motionName).path) {
+                            MotionOverlay(motionName: motionName)
+                                .frame(width: proxy.size.width, height: proxy.size.height)
                         }
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)

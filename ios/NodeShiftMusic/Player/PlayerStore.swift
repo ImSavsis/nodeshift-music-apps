@@ -40,6 +40,7 @@ final class PlayerStore {
     var isFullPlayerOpen = false
     var isQueueOpen = false
     var syncDate = Date()
+    var seekToken = 0
 
     @ObservationIgnored private var engine: PlaybackEngine?
     @ObservationIgnored private var ticker: Timer?
@@ -149,6 +150,19 @@ final class PlayerStore {
         engine?.seek(to: clamped)
         position = clamped
         syncDate = Date()
+        seekToken += 1
+    }
+
+    func resume() {
+        if !isPlaying {
+            togglePlay()
+        }
+    }
+
+    func pause() {
+        if isPlaying {
+            togglePlay()
+        }
     }
 
     func toggleShuffle() {
@@ -215,6 +229,7 @@ final class PlayerStore {
         } else {
             stopTicker()
         }
+        seekToken += 1
         onTrackStarted?(track)
     }
 
