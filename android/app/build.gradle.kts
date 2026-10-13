@@ -24,9 +24,10 @@ android {
         if (path != null && file(path).exists()) {
             create("release") {
                 storeFile = file(path)
+                storeType = "pkcs12"
                 storePassword = System.getenv("NSM_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("NSM_KEY_ALIAS")
-                keyPassword = System.getenv("NSM_KEY_PASSWORD")
+                keyPassword = System.getenv("NSM_KEY_PASSWORD") ?: System.getenv("NSM_KEYSTORE_PASSWORD")
             }
         }
     }

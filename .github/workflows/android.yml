@@ -6,6 +6,7 @@ on:
     paths:
       - android/**
       - shared/**
+      - tools/ci/android-shoot.sh
       - .github/workflows/android.yml
   pull_request:
     paths:
@@ -18,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   core:
@@ -46,7 +47,7 @@ jobs:
           name: core-test-report
           path: android/core/build/reports/tests
 
-  app:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -61,19 +62,50 @@ jobs:
         with:
           gradle-version: 8.14.6
 
-      - name: Build debug
+      - name: Signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE" ]; then
+            echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.p12"
+            echo "NSM_KEYSTORE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build release
         working-directory: android
         env:
           NSM_BUILD: ${{ github.run_number }}
-        run: gradle :app:assembleDebug --console=plain
+          NSM_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NSM_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: gradle :app:assembleRelease --console=plain
+
+      - name: Manifest
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk NodeShiftMusic.apk
+          VERSION=$(grep -m1 'versionName' android/app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          SIZE=$(stat -c%s NodeShiftMusic.apk)
+          SHA=$(sha256sum NodeShiftMusic.apk | cut -d' ' -f1)
+          NOTES=$(git log -1 --pretty=%s)
+          jq -n \
+            --arg version "$VERSION" \
+            --argjson build ${{ github.run_number }} \
+            --arg commit "$GITHUB_SHA" \
+            --argjson size "$SIZE" \
+            --arg sha256 "$SHA" \
+            --arg notes "$NOTES" \
+            --arg builtAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{platform: "android", version: $version, build: $build, commit: $commit, file: "NodeShiftMusic.apk", size: $size, sha256: $sha256, minOS: "8.0", notes: $notes, builtAt: $builtAt}' > update.json
+          cat update.json
 
       - uses: actions/upload-artifact@v7
         with:
-          name: apk-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: apk
+          path: |
+            NodeShiftMusic.apk
+            update.json
 
   emulator:
-    needs: app
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -89,7 +121,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: apk-debug
+          name: apk
           path: apk
 
       - name: Enable KVM
@@ -105,10 +137,31 @@ jobs:
           target: google_apis
           profile: ${{ matrix.profile }}
           disable-animations: true
-          script: bash tools/ci/android-shoot.sh apk/app-debug.apk screens
+          script: bash tools/ci/android-shoot.sh apk/NodeShiftMusic.apk screens
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: android-screens-${{ matrix.name }}
           path: screens
+
+  publish:
+    needs: [core, build]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: apk
+          path: apk
+
+      - name: Publish rolling release
+        working-directory: apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view android-latest >/dev/null 2>&1 || gh release create android-latest --prerelease --title "Android rolling" --notes "rolling build from main"
+          gh release upload android-latest NodeShiftMusic.apk update.json --clobber
