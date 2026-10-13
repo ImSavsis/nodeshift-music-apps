@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -67,15 +67,16 @@ const files = names.map((name, index) => {
 });
 
 log(`launching ${exe}`);
+const appOutput = openSync(join(outDir, 'app.log'), 'a');
 const child = spawn(exe, [], {
   env: {
     ...process.env,
     NSM_MUTE: '1',
     NSM_DATA_DIR: dataDir,
     WEBVIEW2_USER_DATA_FOLDER: profileDir,
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=*`
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=* --disable-gpu`
   },
-  stdio: 'ignore'
+  stdio: ['ignore', appOutput, appOutput]
 });
 child.on('exit', (code) => log(`app exited with ${code}`));
 
@@ -85,6 +86,24 @@ function killApp() {
   } catch {
     child.kill();
   }
+}
+
+function diagnose() {
+  const script = [
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'nodeshift|msedgewebview2' } | Select-Object ProcessId,Name,CommandLine | Format-List | Out-String -Width 400",
+    "Get-NetTCPConnection -State Listen | Where-Object { $_.LocalAddress -eq '127.0.0.1' } | Select-Object LocalPort,OwningProcess | Format-Table | Out-String"
+  ].join('; ');
+  const result = spawnSync('powershell', ['-NoProfile', '-Command', script], { encoding: 'utf8' });
+  log(`diagnostics:
+${result.stdout}${result.stderr}`);
+  const panic = join(tmpdir(), 'nodeshift-music-panic.log');
+  if (existsSync(panic)) log(`panic log:
+${readFileSync(panic, 'utf8')}`);
+  const output = join(outDir, 'app.log');
+  if (existsSync(output)) log(`app output:
+${readFileSync(output, 'utf8').slice(-3000)}`);
+  log(`data dir: ${existsSync(dataDir) ? readdirSync(dataDir).join(', ') : 'missing'}`);
+  log(`webview profile: ${existsSync(profileDir) ? readdirSync(profileDir).join(', ') : 'missing'}`);
 }
 
 async function findTarget() {
@@ -100,6 +119,7 @@ async function findTarget() {
     }
     await sleep(500);
   }
+  diagnose();
   throw new Error('no webview target on the debugging port');
 }
 
