@@ -16,15 +16,7 @@ tmo() {
 
 wait_booted() {
   local udid="$1"
-  local waited=0
-  while [ "$waited" -lt 300 ]; do
-    if xcrun simctl list devices | grep "$udid" | grep -q "(Booted)"; then
-      return 0
-    fi
-    sleep 3
-    waited=$((waited + 3))
-  done
-  return 1
+  tmo 300 xcrun simctl bootstatus "$udid" > /dev/null 2>&1
 }
 
 shoot_device() {
@@ -47,6 +39,7 @@ shoot_device() {
   stamp "booted $name"
   tmo 30 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
   tmo 480 xcrun simctl install "$udid" "$APP" || return
+  local pause=14
   for route in $routes; do
     case "$route" in
       library) args="-nsm-demo" ;;
@@ -55,7 +48,8 @@ shoot_device() {
       *) args="-nsm-demo -nsm-route $route" ;;
     esac
     tmo 60 xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" $args > /dev/null || true
-    sleep 5
+    sleep "$pause"
+    pause=5
     tmo 60 xcrun simctl io "$udid" screenshot "$OUT/${slug}-${route}.png" || true
     stamp "shot $slug $route"
   done
