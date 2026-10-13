@@ -99,6 +99,7 @@ fn track_from_row(row: &Row) -> rusqlite::Result<Track> {
         palette: row.get(26)?,
         lyrics_kind: row.get(27)?,
         lyrics_source: row.get(28)?,
+        stream_url: None,
     })
 }
 

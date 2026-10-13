@@ -73,6 +73,8 @@ pub struct SiteTrack {
     pub motion_filename: Option<String>,
     pub stream_filename: Option<String>,
     pub format: Option<String>,
+    pub play_count: Option<i64>,
+    pub media_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -220,13 +222,17 @@ impl Site {
     }
 
     async fn authorized(&self, path: &str) -> Result<String> {
+        self.authorized_with(path, reqwest::Method::GET).await
+    }
+
+    async fn authorized_with(&self, path: &str, method: reqwest::Method) -> Result<String> {
         let existing = self.access.lock().ok().and_then(|value| value.clone());
         let mut token = match existing {
             Some(token) => token,
             None => self.refresh_access().await?,
         };
         for attempt in 0..2 {
-            let response = self.http.get(Self::url(path)).bearer_auth(&token).send().await?;
+            let response = self.http.request(method.clone(), Self::url(path)).bearer_auth(&token).send().await?;
             let status = response.status();
             if status.as_u16() == 401 && attempt == 0 {
                 token = self.refresh_access().await?;
@@ -260,6 +266,54 @@ impl Site {
         let text = self.http.get(Self::url(&format!("/api/music/lyrics/{track_id}"))).send().await.ok()?.text().await.ok()?;
         serde_json::from_str(&text).ok()
     }
+
+    pub async fn catalog(&self, search: &str, sort: &str, format: Option<&str>, limit: u32, offset: u32) -> Result<Vec<SiteTrack>> {
+        let mut query: Vec<(&str, String)> = vec![("sort", sort.to_string()), ("limit", limit.to_string()), ("offset", offset.to_string())];
+        if !search.is_empty() {
+            query.push(("search", search.to_string()));
+        }
+        if let Some(format) = format {
+            query.push(("format", format.to_string()));
+        }
+        let link = url::Url::parse_with_params(&Self::url("/api/music/tracks"), &query)?;
+        let response = self.http.get(link).send().await?;
+        if !response.status().is_success() {
+            return Err(SiteError::Server(response.status().as_u16()).into());
+        }
+        Ok(serde_json::from_str(&response.text().await?)?)
+    }
+
+    pub async fn wave(&self, limit: u32) -> Result<Vec<SiteTrack>> {
+        let link = url::Url::parse_with_params(&Self::url("/api/music/wave"), &[("limit", limit.to_string())])?;
+        let response = self.http.get(link).send().await?;
+        if !response.status().is_success() {
+            return Err(SiteError::Server(response.status().as_u16()).into());
+        }
+        Ok(serde_json::from_str(&response.text().await?)?)
+    }
+
+    pub async fn register_play(&self, track_id: &str) {
+        let _ = self.http.post(Self::url(&format!("/api/music/tracks/{track_id}/play"))).send().await;
+    }
+
+    pub async fn liked_ids(&self) -> Result<Vec<String>> {
+        let value: Value = serde_json::from_str(&self.authorized("/api/music/me/library").await?)?;
+        let ids = value.get("favorite_ids").and_then(|ids| ids.as_array()).cloned().unwrap_or_default();
+        Ok(ids
+            .into_iter()
+            .filter_map(|id| match id {
+                Value::String(text) => Some(text),
+                Value::Number(number) => Some(number.to_string()),
+                _ => None,
+            })
+            .collect())
+    }
+
+    pub async fn set_liked(&self, track_id: &str, value: bool) -> Result<()> {
+        let method = if value { reqwest::Method::POST } else { reqwest::Method::DELETE };
+        self.authorized_with(&format!("/api/music/favorites/{track_id}"), method).await?;
+        Ok(())
+    }
 }
 
 fn media(folder: &str, name: &str) -> String {
@@ -280,6 +334,56 @@ pub fn cover_url(name: &str) -> String {
     media("covers", name)
 }
 
+pub fn thumb_url(name: &str) -> String {
+    let stem = match name.rfind('.') {
+        Some(position) => &name[..position],
+        None => name,
+    };
+    media("thumbs", &format!("{stem}.webp"))
+}
+
 pub fn motion_url(name: &str) -> String {
     media("motion", name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn track(stream: Option<&str>) -> SiteTrack {
+        SiteTrack {
+            id: "53".into(),
+            title: "T".into(),
+            artist: "A".into(),
+            filename: "x.flac".into(),
+            stream_filename: stream.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn thumbnail_swaps_the_extension_for_webp() {
+        assert_eq!(thumb_url("0123456789abcdef0123456789abcdef.jpg"), format!("{MEDIA}/thumbs/0123456789abcdef0123456789abcdef%2Ewebp"));
+        assert_eq!(thumb_url("noext"), format!("{MEDIA}/thumbs/noext%2Ewebp"));
+    }
+
+    #[test]
+    fn stream_file_is_preferred_unless_lossless() {
+        assert!(audio_url(&track(Some("x.m4a")), false).contains("/stream/"));
+        assert!(audio_url(&track(Some("x.m4a")), true).contains("/tracks/"));
+        assert!(audio_url(&track(None), false).contains("/tracks/"));
+    }
+
+    #[test]
+    fn site_track_decodes_numeric_ids_and_play_counts() {
+        let list: Vec<SiteTrack> = serde_json::from_str(
+            r#"[{"id": 7, "title": "A", "artist": "B", "filename": "a.mp3", "play_count": 12, "media_kind": "audio"},
+                {"id": "x1", "title": "C", "artist": "D", "filename": "c.mp3", "media_kind": "video"}]"#,
+        )
+        .unwrap();
+        assert_eq!(list[0].id, "7");
+        assert_eq!(list[0].play_count, Some(12));
+        assert_eq!(list[1].id, "x1");
+        assert_eq!(list[1].media_kind.as_deref(), Some("video"));
+    }
 }

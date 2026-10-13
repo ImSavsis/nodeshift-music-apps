@@ -71,7 +71,8 @@ fn fixture(catalog: CatalogSource) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::new(root.path().join("data")).unwrap();
     let emit: Emit = Arc::new(|_| {});
-    let engine = Engine::new(EngineConfig { paths, catalog, tokens: Arc::new(MemoryTokenStore::default()), emit }).unwrap();
+    let runtime = tokio::runtime::Handle::current();
+    let engine = Engine::new(EngineConfig { paths, catalog, tokens: Arc::new(MemoryTokenStore::default()), emit, runtime }).unwrap();
     let inputs = root.path().join("inputs");
     std::fs::create_dir_all(&inputs).unwrap();
     Fixture { _root: root, inputs, engine }

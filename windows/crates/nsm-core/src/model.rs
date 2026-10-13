@@ -39,6 +39,8 @@ pub struct Track {
     pub palette: Option<String>,
     pub lyrics_kind: Option<String>,
     pub lyrics_source: Option<String>,
+    #[serde(default)]
+    pub stream_url: Option<String>,
 }
 
 impl Track {

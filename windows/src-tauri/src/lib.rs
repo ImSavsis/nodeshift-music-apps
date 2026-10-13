@@ -3,7 +3,7 @@ mod secure;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use nsm_core::engine::{CatalogSource, Decision, Emit, Engine, EngineConfig, Event, ImportSnapshot, LyricsDto, SiteSnapshot};
+use nsm_core::engine::{CatalogPage, CatalogSource, Decision, Emit, Engine, EngineConfig, Event, ImportSnapshot, LyricsDto, SiteSnapshot};
 use nsm_core::media_server::{self, MediaServer};
 use nsm_core::model::{Playlist, Track};
 use nsm_core::paths::Paths;
@@ -37,11 +37,17 @@ struct AppInfo {
     version: String,
     build: i64,
     media_base: String,
+    muted: bool,
 }
 
 #[tauri::command]
 fn app_info(state: State<AppState>) -> AppInfo {
-    AppInfo { version: env!("CARGO_PKG_VERSION").to_string(), build: build_number(), media_base: state.media.base() }
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        build: build_number(),
+        media_base: state.media.base(),
+        muted: std::env::var_os("NSM_MUTE").is_some(),
+    }
 }
 
 #[tauri::command]
@@ -139,8 +145,46 @@ async fn lyrics_get(state: State<'_, AppState>, track_id: String, force: bool) -
 }
 
 #[tauri::command]
-fn cover_palette(state: State<AppState>, name: String) -> Vec<[u8; 3]> {
-    state.engine.palette(&name)
+async fn cover_palette(state: State<'_, AppState>, name: String) -> Result<Vec<[u8; 3]>, String> {
+    Ok(state.engine.palette_any(&name).await)
+}
+
+#[tauri::command]
+async fn catalog_page(
+    state: State<'_, AppState>,
+    search: String,
+    sort: String,
+    format: Option<String>,
+    limit: u32,
+    offset: u32,
+) -> Result<CatalogPage, String> {
+    text(state.engine.catalog_page(&search, &sort, format.as_deref(), limit, offset).await)
+}
+
+#[tauri::command]
+async fn catalog_wave(state: State<'_, AppState>, limit: u32) -> Result<Vec<Track>, String> {
+    text(state.engine.catalog_wave(limit).await)
+}
+
+#[tauri::command]
+async fn catalog_likes(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    text(state.engine.catalog_likes().await)
+}
+
+#[tauri::command]
+async fn catalog_like(state: State<'_, AppState>, site_id: String, value: bool) -> Result<(), String> {
+    text(state.engine.catalog_set_like(&site_id, value).await)
+}
+
+#[tauri::command]
+async fn catalog_played(state: State<'_, AppState>, site_id: String) -> Result<(), String> {
+    state.engine.catalog_register_play(&site_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn site_lyrics_get(state: State<'_, AppState>, site_id: String) -> Result<LyricsDto, String> {
+    Ok(state.engine.site_lyrics(&site_id).await)
 }
 
 #[tauri::command]
@@ -262,7 +306,19 @@ fn handle_url(app: &AppHandle, link: &str) {
     focus_main(app);
 }
 
+fn install_panic_log() {
+    std::panic::set_hook(Box::new(|info| {
+        let path = std::env::temp_dir().join("nodeshift-music-panic.log");
+        let line = format!("{info}\n");
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            use std::io::Write;
+            let _ = file.write_all(line.as_bytes());
+        }
+    }));
+}
+
 pub fn run() {
+    install_panic_log();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             focus_main(app);
@@ -279,12 +335,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
-            let base = app.path().app_data_dir()?;
+            let base = match std::env::var_os("NSM_DATA_DIR") {
+                Some(custom) => PathBuf::from(custom),
+                None => app.path().app_data_dir()?,
+            };
             let paths = Paths::new(&base)?;
             let handle = app.handle().clone();
             let emit: Emit = Arc::new(move |event| forward(&handle, event));
             let tokens = Arc::new(secure::DpapiStore::open(base.join("tokens.dat")));
-            let engine = Engine::new(EngineConfig { paths, catalog: CatalogSource::Network, tokens, emit })?;
+            let runtime = tauri::async_runtime::handle().inner().clone();
+            let engine = Engine::new(EngineConfig { paths, catalog: CatalogSource::Network, tokens, emit, runtime })?;
             let media = tauri::async_runtime::block_on(media_server::start(engine.clone()))?;
             app.manage(AppState { engine: engine.clone(), media });
 
@@ -335,6 +395,12 @@ pub fn run() {
             import_clear,
             lyrics_get,
             cover_palette,
+            catalog_page,
+            catalog_wave,
+            catalog_likes,
+            catalog_like,
+            catalog_played,
+            site_lyrics_get,
             site_snapshot,
             site_login,
             site_cancel_login,

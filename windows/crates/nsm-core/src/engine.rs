@@ -31,7 +31,7 @@ pub enum Event {
 pub type Emit = Arc<dyn Fn(Event) + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ItemState {
     Waiting,
     Working { text: String },
@@ -149,6 +149,13 @@ struct SiteState {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogPage {
+    pub tracks: Vec<Track>,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum LyricsDto {
     Synced { lines: Vec<LyricLine>, source: Option<String>, kind: LyricsKind },
@@ -171,6 +178,7 @@ struct Inner {
     lossless: Mutex<bool>,
     motion_auto: Mutex<bool>,
     lyrics_inflight: Mutex<std::collections::HashSet<String>>,
+    runtime: tokio::runtime::Handle,
 }
 
 #[derive(Clone)]
@@ -189,6 +197,7 @@ pub struct EngineConfig {
     pub catalog: CatalogSource,
     pub tokens: Arc<dyn TokenStore>,
     pub emit: Emit,
+    pub runtime: tokio::runtime::Handle,
 }
 
 fn fingerprint(track: &Track) -> TrackFingerprint {
@@ -242,6 +251,7 @@ impl Engine {
             lossless: Mutex::new(true),
             motion_auto: Mutex::new(true),
             lyrics_inflight: Mutex::new(Default::default()),
+            runtime: config.runtime,
         };
         Ok(Self { inner: Arc::new(inner) })
     }
@@ -452,7 +462,7 @@ impl Engine {
             return;
         }
         let engine = self.clone();
-        tokio::spawn(async move {
+        self.inner.runtime.spawn(async move {
             engine.run_import(roots).await;
         });
     }
@@ -694,7 +704,7 @@ impl Engine {
 
     fn enrich(&self, track: Track) {
         let engine = self.clone();
-        tokio::spawn(async move {
+        self.inner.runtime.spawn(async move {
             let _ = engine.lyrics(&track.id, false).await;
             engine.find_motion(&track).await;
         });
@@ -772,6 +782,100 @@ impl Engine {
         };
         let small = image.resize_exact(48, 48, image::imageops::FilterType::Triangle).to_rgba8();
         palette::extract(small.as_raw()).iter().map(|color| [color.r, color.g, color.b]).collect()
+    }
+
+    pub async fn palette_any(&self, cover_name: &str) -> Vec<[u8; 3]> {
+        let Some(file) = cover_name.strip_prefix("remote:") else {
+            return self.palette(cover_name);
+        };
+        if let Some(hit) = self.inner.palettes.lock().ok().and_then(|map| map.get(cover_name).cloned()) {
+            return hit;
+        }
+        let fallback = || palette::FALLBACK.iter().map(|color| [color.r, color.g, color.b]).collect::<Vec<_>>();
+        let fetched = match self.inner.http.get(site::thumb_url(file)).send().await {
+            Ok(response) if response.status().is_success() => response.bytes().await.ok(),
+            _ => None,
+        };
+        let computed = match fetched.and_then(|bytes| image::load_from_memory(&bytes).ok()) {
+            Some(image) => {
+                let small = image.resize_exact(48, 48, image::imageops::FilterType::Triangle).to_rgba8();
+                palette::extract(small.as_raw()).iter().map(|color| [color.r, color.g, color.b]).collect()
+            }
+            None => fallback(),
+        };
+        if let Ok(mut map) = self.inner.palettes.lock() {
+            map.insert(cover_name.to_string(), computed.clone());
+        }
+        computed
+    }
+
+    fn catalog_track(item: &SiteTrack) -> Track {
+        let mut track = Track::blank(format!("site:{}", item.id));
+        track.title = item.title.clone();
+        track.artist = item.artist.clone();
+        track.album = item.album.clone();
+        track.duration_ms = (item.duration_seconds.unwrap_or(0.0) * 1000.0) as i64;
+        track.format = item.format.clone().unwrap_or_else(|| "mp3".to_string()).to_lowercase();
+        track.cover_name = item.cover_filename.as_ref().map(|name| format!("remote:{name}"));
+        track.site_id = Some(item.id.clone());
+        track.play_count = item.play_count.unwrap_or(0);
+        track.stream_url = Some(site::audio_url(item, false));
+        track
+    }
+
+    fn catalog_tracks(&self, page: Vec<SiteTrack>) -> Vec<Track> {
+        let local: HashMap<String, Track> = self
+            .inner
+            .db
+            .all_tracks()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|track| track.site_id.clone().map(|id| (id, track)))
+            .collect();
+        page.iter()
+            .filter(|item| item.media_kind.as_deref() != Some("video"))
+            .map(|item| local.get(&item.id).cloned().unwrap_or_else(|| Self::catalog_track(item)))
+            .collect()
+    }
+
+    pub async fn catalog_page(&self, search: &str, sort: &str, format: Option<&str>, limit: u32, offset: u32) -> Result<CatalogPage> {
+        let page = self.inner.site.catalog(search, sort, format, limit, offset).await?;
+        let count = page.len();
+        Ok(CatalogPage { tracks: self.catalog_tracks(page), count })
+    }
+
+    pub async fn catalog_wave(&self, limit: u32) -> Result<Vec<Track>> {
+        let page = self.inner.site.wave(limit).await?;
+        Ok(self.catalog_tracks(page))
+    }
+
+    pub async fn catalog_likes(&self) -> Result<Vec<String>> {
+        self.inner.site.liked_ids().await
+    }
+
+    pub async fn catalog_set_like(&self, site_id: &str, value: bool) -> Result<()> {
+        self.inner.site.set_liked(site_id, value).await
+    }
+
+    pub async fn catalog_register_play(&self, site_id: &str) {
+        self.inner.site.register_play(site_id).await;
+    }
+
+    pub async fn site_lyrics(&self, site_id: &str) -> LyricsDto {
+        let Some(found) = self.inner.site.lyrics(site_id).await else {
+            return LyricsDto::None;
+        };
+        if let Some(text) = found.synced.as_deref().filter(|text| !text.is_empty()) {
+            let lines = lrc::parse(text);
+            if !lines.is_empty() {
+                let kind = lrc::kind(&lines);
+                return LyricsDto::Synced { lines, source: found.source.clone(), kind };
+            }
+        }
+        if let Some(plain) = found.plain.clone().filter(|text| !text.is_empty()) {
+            return LyricsDto::Plain { text: plain, source: found.source.clone() };
+        }
+        LyricsDto::None
     }
 
     pub async fn lyrics(&self, track_id: &str, force: bool) -> Result<LyricsDto> {
@@ -1240,5 +1344,36 @@ fn stored_lyrics(record: &LyricsRecord) -> Option<LyricsDto> {
                 None
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::*;
+
+    #[test]
+    fn catalog_track_streams_and_keeps_site_identity() {
+        let item = SiteTrack {
+            id: "53".into(),
+            title: "Т".into(),
+            artist: "А".into(),
+            album: Some("Alb".into()),
+            duration_seconds: Some(201.5),
+            filename: "x.flac".into(),
+            cover_filename: Some("c.jpg".into()),
+            stream_filename: Some("x.m4a".into()),
+            format: Some("FLAC".into()),
+            play_count: Some(7),
+            ..Default::default()
+        };
+        let track = Engine::catalog_track(&item);
+        assert_eq!(track.id, "site:53");
+        assert_eq!(track.site_id.as_deref(), Some("53"));
+        assert_eq!(track.duration_ms, 201_500);
+        assert_eq!(track.format, "flac");
+        assert_eq!(track.play_count, 7);
+        assert_eq!(track.cover_name.as_deref(), Some("remote:c.jpg"));
+        assert!(track.stream_url.as_deref().unwrap().contains("/stream/"));
+        assert!(track.file_name.is_empty());
     }
 }
