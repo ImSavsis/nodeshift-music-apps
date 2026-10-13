@@ -11,7 +11,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import space.nodeshift.music.data.DemoData
 import space.nodeshift.music.imports.ImportSource
 import space.nodeshift.music.ui.NsmRoot
 
@@ -25,6 +27,9 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
+        if (intent.getBooleanExtra("nsm_demo", false)) {
+            lifecycleScope.launch(Dispatchers.IO) { DemoData.seed(graph.database) }
+        }
         setContent {
             CompositionLocalProvider(LocalGraph provides graph) {
                 NsmRoot(this)

@@ -37,9 +37,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import space.nodeshift.music.LocalGraph
 import space.nodeshift.music.MainActivity
+import space.nodeshift.music.data.LibraryViewMode
 import space.nodeshift.music.design.FlowField
 import space.nodeshift.music.design.LocalReduceMotion
 import space.nodeshift.music.design.LocalScale
@@ -65,6 +67,39 @@ fun NsmRoot(activity: MainActivity) {
     var showStorage by remember { mutableStateOf(false) }
     var chromeHeight by remember { mutableStateOf(0.dp) }
     val scope = rememberCoroutineScope()
+
+    val demoExtras = activity.intent
+    var demoHandled by remember { mutableStateOf(false) }
+    LaunchedEffect(library.tracks.size) {
+        if (demoHandled || !demoExtras.getBooleanExtra("nsm_demo", false) || library.tracks.isEmpty()) return@LaunchedEffect
+        demoHandled = true
+        delay(500)
+        val sorted = library.tracks.sortedBy { it.id }
+        when (val route = demoExtras.getStringExtra("nsm_route")) {
+            "playlists" -> tab = AppTab.Playlists
+            "favorites" -> tab = AppTab.Favorites
+            "import" -> tab = AppTab.Importer
+            "list" -> library.changeViewMode(LibraryViewMode.List)
+            "more" -> showMore = true
+            "storage" -> showStorage = true
+            "player", "lyrics", "queue" -> {
+                val first = sorted.firstOrNull()
+                if (first != null) {
+                    player.play(first, sorted)
+                    player.isFullPlayerOpen = true
+                    player.isQueueOpen = route == "queue"
+                }
+            }
+        }
+        if (demoExtras.getBooleanExtra("nsm_playing", false)) {
+            sorted.getOrNull(2)?.let { player.play(it, sorted) }
+        }
+        val seek = demoExtras.getDoubleExtra("nsm_seek", -1.0)
+        if (seek >= 0) {
+            delay(900)
+            player.seek(seek)
+        }
+    }
 
     val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {

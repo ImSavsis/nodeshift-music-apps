@@ -66,3 +66,49 @@ jobs:
         env:
           NSM_BUILD: ${{ github.run_number }}
         run: gradle :app:assembleDebug --console=plain
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apk-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  emulator:
+    needs: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pixel6
+            profile: pixel_6
+          - name: nexus5
+            profile: Nexus 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: apk-debug
+          path: apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          script: bash tools/ci/android-shoot.sh apk/app-debug.apk screens
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: android-screens-${{ matrix.name }}
+          path: screens

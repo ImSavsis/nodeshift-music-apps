@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import space.nodeshift.music.LocalGraph
@@ -71,7 +72,9 @@ fun FullPlayerScreen() {
     val graph = LocalGraph.current
     val player = graph.player
     val lyrics = graph.lyrics
-    var tab by remember { mutableStateOf(PlayerTab.Player) }
+    val context = LocalContext.current
+    val startOnLyrics = remember { context.findActivity()?.intent?.getBooleanExtra("nsm_lyrics", false) == true }
+    var tab by remember { mutableStateOf(if (startOnLyrics) PlayerTab.Lyrics else PlayerTab.Player) }
     var drag by remember { mutableFloatStateOf(0f) }
     var palette by remember { mutableStateOf<List<Rgb8>>(PaletteExtractor.fallback) }
     val track = player.current
