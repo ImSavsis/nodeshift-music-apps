@@ -1,0 +1,352 @@
+mod secure;
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use nsm_core::engine::{CatalogSource, Decision, Emit, Engine, EngineConfig, Event, ImportSnapshot, LyricsDto, SiteSnapshot};
+use nsm_core::media_server::{self, MediaServer};
+use nsm_core::model::{Playlist, Track};
+use nsm_core::paths::Paths;
+use nsm_core::update::{self, UpdateManifest};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_opener::OpenerExt;
+
+const BUILD: &str = match option_env!("NSM_BUILD") {
+    Some(value) => value,
+    None => "0",
+};
+
+struct AppState {
+    engine: Engine,
+    media: MediaServer,
+}
+
+fn build_number() -> i64 {
+    BUILD.parse().unwrap_or(0)
+}
+
+fn text<T, E: std::fmt::Display>(result: Result<T, E>) -> Result<T, String> {
+    result.map_err(|error| error.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppInfo {
+    version: String,
+    build: i64,
+    media_base: String,
+}
+
+#[tauri::command]
+fn app_info(state: State<AppState>) -> AppInfo {
+    AppInfo { version: env!("CARGO_PKG_VERSION").to_string(), build: build_number(), media_base: state.media.base() }
+}
+
+#[tauri::command]
+fn library_all(state: State<AppState>) -> Result<Vec<Track>, String> {
+    text(state.engine.library())
+}
+
+#[tauri::command]
+fn playlists_all(state: State<AppState>) -> Result<Vec<Playlist>, String> {
+    text(state.engine.playlists())
+}
+
+#[tauri::command]
+fn track_favorite(state: State<AppState>, id: String, value: bool) -> Result<(), String> {
+    text(state.engine.set_favorite(&id, value))
+}
+
+#[tauri::command]
+fn track_played(state: State<AppState>, id: String) -> Result<(), String> {
+    text(state.engine.mark_played(&id))
+}
+
+#[tauri::command]
+fn track_delete(state: State<AppState>, id: String) -> Result<(), String> {
+    text(state.engine.delete_track(&id))
+}
+
+#[tauri::command]
+fn track_update(
+    state: State<AppState>,
+    id: String,
+    title: String,
+    artist: String,
+    album: Option<String>,
+    track_number: Option<i64>,
+) -> Result<Track, String> {
+    text(state.engine.update_track(&id, &title, &artist, album, track_number))
+}
+
+#[tauri::command]
+fn playlist_create(state: State<AppState>, name: String) -> Result<Playlist, String> {
+    text(state.engine.create_playlist(&name))
+}
+
+#[tauri::command]
+fn playlist_add(state: State<AppState>, playlist_id: String, track_id: String) -> Result<(), String> {
+    text(state.engine.playlist_add(&playlist_id, &track_id))
+}
+
+#[tauri::command]
+fn playlist_remove(state: State<AppState>, playlist_id: String, track_id: String) -> Result<(), String> {
+    text(state.engine.playlist_remove(&playlist_id, &track_id))
+}
+
+#[tauri::command]
+fn playlist_rename(state: State<AppState>, playlist_id: String, name: String) -> Result<(), String> {
+    text(state.engine.rename_playlist(&playlist_id, &name))
+}
+
+#[tauri::command]
+fn playlist_delete(state: State<AppState>, playlist_id: String) -> Result<(), String> {
+    text(state.engine.delete_playlist(&playlist_id))
+}
+
+#[tauri::command]
+fn import_start(state: State<AppState>, paths: Vec<String>) {
+    state.engine.start_import(paths.into_iter().map(PathBuf::from).collect());
+}
+
+#[tauri::command]
+fn import_snapshot(state: State<AppState>) -> ImportSnapshot {
+    state.engine.import_snapshot()
+}
+
+#[tauri::command]
+fn import_decide(state: State<AppState>, id: String, decision: String) {
+    if let Some(parsed) = Decision::parse(&decision) {
+        state.engine.import_decide(&id, parsed);
+    }
+}
+
+#[tauri::command]
+fn import_skip_all(state: State<AppState>) {
+    state.engine.import_skip_all_duplicates();
+}
+
+#[tauri::command]
+fn import_clear(state: State<AppState>) {
+    state.engine.import_clear();
+}
+
+#[tauri::command]
+async fn lyrics_get(state: State<'_, AppState>, track_id: String, force: bool) -> Result<LyricsDto, String> {
+    text(state.engine.lyrics(&track_id, force).await)
+}
+
+#[tauri::command]
+fn cover_palette(state: State<AppState>, name: String) -> Vec<[u8; 3]> {
+    state.engine.palette(&name)
+}
+
+#[tauri::command]
+fn site_snapshot(state: State<AppState>) -> SiteSnapshot {
+    state.engine.site_snapshot()
+}
+
+#[tauri::command]
+async fn site_login(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let url = text(state.engine.site_login_url().await)?;
+    text(app.opener().open_url(url, None::<&str>))
+}
+
+#[tauri::command]
+fn site_cancel_login(state: State<AppState>) {
+    state.engine.site_cancel_login();
+}
+
+#[tauri::command]
+fn site_logout(state: State<AppState>) {
+    state.engine.site_logout();
+}
+
+#[tauri::command]
+async fn site_refresh(state: State<'_, AppState>) -> Result<(), String> {
+    state.engine.site_refresh().await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn site_download_favorites(state: State<'_, AppState>) -> Result<(), String> {
+    state.engine.site_download_favorites().await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn site_download_playlist(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state.engine.site_download_playlist(&id).await;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_lossless(state: State<AppState>, value: bool) {
+    state.engine.set_lossless(value);
+}
+
+#[tauri::command]
+fn set_motion_auto(state: State<AppState>, value: bool) {
+    state.engine.set_motion_auto(value);
+}
+
+#[tauri::command]
+async fn update_check(state: State<'_, AppState>) -> Result<Option<UpdateManifest>, String> {
+    text(update::check(&state.engine.http(), env!("CARGO_PKG_VERSION"), build_number()).await)
+}
+
+#[tauri::command]
+async fn update_install(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let http = state.engine.http();
+    let manifest = text(update::check(&http, env!("CARGO_PKG_VERSION"), build_number()).await)?;
+    let Some(manifest) = manifest else {
+        return Ok(());
+    };
+    let installer = text(update::download(&http, &manifest, &state.engine.paths().updates).await)?;
+    let current = text(std::env::current_exe())?;
+    let command = format!("\"{}\" /S && start \"\" \"{}\"", installer.display(), current.display());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED: u32 = 0x00000008 | 0x08000000;
+        text(std::process::Command::new("cmd").args(["/C", &command]).creation_flags(DETACHED).spawn())?;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = command;
+    }
+    app.exit(0);
+    Ok(())
+}
+
+fn forward(app: &AppHandle, event: Event) {
+    match event {
+        Event::Library => {
+            let _ = app.emit("nsm:library", ());
+        }
+        Event::Import => {
+            let _ = app.emit("nsm:import", ());
+        }
+        Event::Site => {
+            let _ = app.emit("nsm:site", ());
+        }
+        Event::Toast(message) => {
+            let _ = app.emit("nsm:toast", message);
+        }
+    }
+}
+
+fn focus_main(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn audio_args(args: &[String]) -> Vec<PathBuf> {
+    args.iter().skip(1).map(PathBuf::from).filter(|path| path.exists()).collect()
+}
+
+fn handle_url(app: &AppHandle, link: &str) {
+    if !link.starts_with("nodeshiftmusic://auth/callback") {
+        return;
+    }
+    let engine = app.state::<AppState>().engine.clone();
+    let link = link.to_string();
+    tauri::async_runtime::spawn(async move {
+        let _ = engine.site_complete_login(&link).await;
+    });
+    focus_main(app);
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            focus_main(app);
+            let files = audio_args(&args);
+            if !files.is_empty() {
+                app.state::<AppState>().engine.start_import(files);
+            }
+            for argument in &args {
+                handle_url(app, argument);
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .setup(|app| {
+            let base = app.path().app_data_dir()?;
+            let paths = Paths::new(&base)?;
+            let handle = app.handle().clone();
+            let emit: Emit = Arc::new(move |event| forward(&handle, event));
+            let tokens = Arc::new(secure::DpapiStore::open(base.join("tokens.dat")));
+            let engine = Engine::new(EngineConfig { paths, catalog: CatalogSource::Network, tokens, emit })?;
+            let media = tauri::async_runtime::block_on(media_server::start(engine.clone()))?;
+            app.manage(AppState { engine: engine.clone(), media });
+
+            let deep = app.deep_link();
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                let _ = deep.register_all();
+            }
+            let handle = app.handle().clone();
+            deep.on_open_url(move |event| {
+                for link in event.urls() {
+                    handle_url(&handle, link.as_str());
+                }
+            });
+            if let Ok(Some(urls)) = deep.get_current() {
+                for link in urls {
+                    handle_url(app.handle(), link.as_str());
+                }
+            }
+
+            let files = audio_args(&std::env::args().collect::<Vec<_>>());
+            if !files.is_empty() {
+                engine.start_import(files);
+            }
+            let restore = engine.clone();
+            tauri::async_runtime::spawn(async move {
+                restore.site_restore().await;
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            library_all,
+            playlists_all,
+            track_favorite,
+            track_played,
+            track_delete,
+            track_update,
+            playlist_create,
+            playlist_add,
+            playlist_remove,
+            playlist_rename,
+            playlist_delete,
+            import_start,
+            import_snapshot,
+            import_decide,
+            import_skip_all,
+            import_clear,
+            lyrics_get,
+            cover_palette,
+            site_snapshot,
+            site_login,
+            site_cancel_login,
+            site_logout,
+            site_refresh,
+            site_download_favorites,
+            site_download_playlist,
+            set_lossless,
+            set_motion_auto,
+            update_check,
+            update_install,
+        ])
+        .run(tauri::generate_context!())
+        .expect("run");
+}
