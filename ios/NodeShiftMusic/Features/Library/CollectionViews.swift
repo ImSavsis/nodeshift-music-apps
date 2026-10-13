@@ -82,11 +82,27 @@ struct PlaylistsView: View {
 
     private var albums: [(name: String, tracks: [TrackRecord])] {
         Dictionary(grouping: library.tracks.filter { $0.album != nil }, by: { $0.album ?? "" })
-            .map { (name: $0.key, tracks: $0.value) }
+            .map { entry in
+                (
+                    name: entry.key,
+                    tracks: entry.value.sorted {
+                        ($0.discNumber ?? 1, $0.trackNumber ?? 0) < ($1.discNumber ?? 1, $1.trackNumber ?? 0)
+                    }
+                )
+            }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    private var columns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: s(14), alignment: .top),
+            GridItem(.flexible(), spacing: s(14), alignment: .top),
+        ]
+    }
+
     var body: some View {
+        let lists = library.playlists
+        let shelves = albums
         ScreenScroll {
             PageHeader(title: "Плейлисты", subtitle: "Ваши подборки")
                 .reveal(0)
@@ -96,45 +112,42 @@ struct PlaylistsView: View {
             .buttonStyle(GhostButtonStyle())
             .padding(.bottom, s(22))
             .reveal(1)
-            LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: s(14), alignment: .top),
-                    GridItem(.flexible(), spacing: s(14), alignment: .top),
-                ],
-                spacing: s(24)
-            ) {
+            LazyVGrid(columns: columns, spacing: s(24)) {
                 Button {
                     toasts.show("Плейлисты скоро будут")
                 } label: {
-                    VStack(spacing: s(10)) {
-                        Icon(name: .plus, size: s(24), stroke: 1.6)
-                        Text("Новый плейлист")
-                            .font(.nsm(.interMedium, s(13.5)))
-                    }
-                    .foregroundStyle(Palette.muted)
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: s(Radius.tile), style: .continuous)
-                            .strokeBorder(Palette.line2, style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
-                    )
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay {
+                            VStack(spacing: s(10)) {
+                                Icon(name: .plus, size: s(24), stroke: 1.6)
+                                Text("Новый плейлист")
+                                    .font(.nsm(.interMedium, s(13.5)))
+                            }
+                            .foregroundStyle(Palette.muted)
+                        }
+                        .overlay(
+                            RoundedRectangle(cornerRadius: s(Radius.tile), style: .continuous)
+                                .strokeBorder(Palette.line2, style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
+                        )
                 }
                 .buttonStyle(PressStyle(pressedOpacity: 0.7))
-                ForEach(Array(albums.enumerated()), id: \.element.name) { index, album in
+                ForEach(Array(lists.enumerated()), id: \.element.id) { index, playlist in
+                    let tracks = library.tracks(in: playlist)
                     Button {
-                        if let first = album.tracks.first {
+                        if let first = tracks.first {
                             player.shuffle = false
-                            player.play(first, in: album.tracks)
+                            player.play(first, in: tracks)
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: s(12)) {
-                            CoverArt(coverName: album.tracks.first?.coverName)
+                            CoverArt(coverName: playlist.coverName ?? tracks.first(where: { $0.coverName != nil })?.coverName)
                             VStack(alignment: .leading, spacing: s(2)) {
-                                Text(album.name)
+                                Text(playlist.name)
                                     .font(.nsm(.interMedium, s(14)))
                                     .foregroundStyle(Palette.white)
                                     .lineLimit(1)
-                                Text(pluralTracks(album.tracks.count))
+                                Text(pluralTracks(tracks.count))
                                     .font(.nsm(.monoRegular, s(11)))
                                     .foregroundStyle(Palette.dim)
                             }
@@ -144,7 +157,35 @@ struct PlaylistsView: View {
                     .stagger(index + 1, rise: 16, step: 0.05)
                 }
             }
+            if !shelves.isEmpty {
+                Eyebrow(text: "Альбомы")
+                    .padding(.top, s(30))
+                LazyVGrid(columns: columns, spacing: s(24)) {
+                    ForEach(Array(shelves.enumerated()), id: \.element.name) { index, album in
+                        Button {
+                            if let first = album.tracks.first {
+                                player.shuffle = false
+                                player.play(first, in: album.tracks)
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: s(12)) {
+                                CoverArt(coverName: album.tracks.first(where: { $0.coverName != nil })?.coverName)
+                                VStack(alignment: .leading, spacing: s(2)) {
+                                    Text(album.name)
+                                        .font(.nsm(.interMedium, s(14)))
+                                        .foregroundStyle(Palette.white)
+                                        .lineLimit(1)
+                                    Text(pluralTracks(album.tracks.count))
+                                        .font(.nsm(.monoRegular, s(11)))
+                                        .foregroundStyle(Palette.dim)
+                                }
+                            }
+                        }
+                        .buttonStyle(PressStyle(pressedOpacity: 0.9))
+                        .stagger(index + 1, rise: 16, step: 0.05)
+                    }
+                }
+            }
         }
     }
 }
-

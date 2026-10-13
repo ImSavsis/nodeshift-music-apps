@@ -39,6 +39,7 @@ enum LibraryViewMode: String, Sendable {
 @Observable
 final class LibraryStore {
     var tracks: [TrackRecord] = []
+    var playlists: [PlaylistRecord] = []
     var query = ""
     var sort: LibrarySort = .newest
     var formatFilter: FormatFilter = .all
@@ -48,6 +49,7 @@ final class LibraryStore {
 
     @ObservationIgnored private var database: AppDatabase?
     @ObservationIgnored private var observation: Task<Void, Never>?
+    @ObservationIgnored private var playlistObservation: Task<Void, Never>?
 
     init() {
         viewMode = LibraryViewMode(rawValue: UserDefaults.standard.string(forKey: "nsm_view") ?? "") ?? .grid
@@ -69,6 +71,27 @@ final class LibraryStore {
                 self?.loaded = true
             }
         }
+        playlistObservation?.cancel()
+        playlistObservation = Task { [weak self] in
+            let stream = ValueObservation
+                .tracking { db in try PlaylistRecord.order(Column("createdAt").desc).fetchAll(db) }
+                .values(in: database.queue)
+            do {
+                for try await list in stream {
+                    self?.playlists = list
+                }
+            } catch {}
+        }
+    }
+
+    func tracks(in playlist: PlaylistRecord) -> [TrackRecord] {
+        let ids = (try? database?.trackIDs(playlist: playlist.id)) ?? []
+        let byID = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ids.compactMap { byID[$0] }
+    }
+
+    func deletePlaylist(_ playlist: PlaylistRecord) {
+        try? database?.deletePlaylist(id: playlist.id)
     }
 
     func changeViewMode(_ mode: LibraryViewMode) {

@@ -17,6 +17,14 @@ final class AppModel {
     private var nowPlaying: NowPlayingController?
     private var engine: PlaybackEngine?
 
+    static var isTestHost: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    static var launchDemo: Bool {
+        ProcessInfo.processInfo.arguments.contains("-nsm-demo") || isTestHost
+    }
+
     init(demo: Bool) {
         let db: AppDatabase
         let playback: PlaybackEngine

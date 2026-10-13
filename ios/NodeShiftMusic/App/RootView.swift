@@ -5,7 +5,7 @@ struct RootView: View {
     @State private var showMore = false
     @State private var barHeight: CGFloat = 0
     @State private var showStorage = false
-    @State private var model = AppModel(demo: ProcessInfo.processInfo.arguments.contains("-nsm-demo"))
+    @State private var model = AppModel(demo: AppModel.launchDemo)
 
     var body: some View {
         let library = model.library
