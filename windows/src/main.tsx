@@ -1,13 +1,13 @@
 import React from 'react';
-import { createRoot } from 'react-dom/client';
+import ReactDOM from 'react-dom/client';
+import { HashRouter } from 'react-router-dom';
+import { App } from './App';
 import './index.css';
 
-function App() {
-  return <div className="boot">NS Music</div>;
-}
-
-createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <HashRouter>
+      <App />
+    </HashRouter>
   </React.StrictMode>
 );
