@@ -56,8 +56,15 @@ class SiteSession {
             SiteApi.setTokens(pair.accessToken, pair.refreshToken)
             user = pair.user
             return true
+        } catch (error: SiteException) {
+            lastError = if (error.kind == SiteException.Kind.BadCallback) {
+                "Сайт не вернул данные для входа. Попробуй войти ещё раз."
+            } else {
+                "Не получилось войти. Проверь интернет и попробуй ещё раз."
+            }
+            return false
         } catch (_: Exception) {
-            lastError = "Не получилось войти. Если входишь через Google или Telegram, попробуй почту и пароль."
+            lastError = "Не получилось войти. Проверь интернет и попробуй ещё раз."
             return false
         } finally {
             tabOpen = false

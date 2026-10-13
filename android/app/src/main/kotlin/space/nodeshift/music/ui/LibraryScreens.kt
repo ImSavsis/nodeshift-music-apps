@@ -118,6 +118,7 @@ fun LibraryScreen() {
     val library = graph.library
     val player = graph.player
     val openTab = LocalOpenTab.current
+    val openStorage = LocalOpenStorage.current
     val list = library.filtered
     val grid = library.viewMode == LibraryViewMode.Grid
     val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
@@ -163,12 +164,13 @@ fun LibraryScreen() {
                         CrystalMark(s(40), dim = true)
                         NText("Пока пусто", Face.UnboundedSemibold, 16f, color = Palette.white)
                         NText(
-                            "Добавь треки через вкладку «Импорт»: файлы, папки или архивы. Названия, альбомы и обложки подтянутся сами.",
+                            "Добавь треки через вкладку «Импорт»: файлы, папки или архивы. Названия, альбомы и обложки подтянутся сами. Или войди через сайт и скачай свои плейлисты и лайки.",
                             Face.InterRegular,
                             13.5f,
                             color = Palette.muted,
                         )
                         PrimaryButton("Открыть импорт", icon = LucideName.Upload) { openTab(AppTab.Importer) }
+                        GhostButton("Скачать с сайта", icon = LucideName.CloudDownload) { openStorage() }
                     }
                 }
             }
