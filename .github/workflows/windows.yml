@@ -1,0 +1,165 @@
+name: windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - windows/**
+      - shared/**
+      - tools/ci/win-smoke.mjs
+      - .github/workflows/windows.yml
+  pull_request:
+    paths:
+      - windows/**
+      - shared/**
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: windows
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+
+      - name: Rust core tests
+        run: cargo test -p nsm-core
+
+      - name: Install web deps
+        run: npm ci
+
+      - name: Web tests
+        run: npm test
+
+      - name: Typecheck and bundle
+        run: npm run build
+
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: windows
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+
+      - name: Install web deps
+        run: npm ci
+
+      - name: Build installer
+        env:
+          NSM_BUILD: ${{ github.run_number }}
+        run: npx tauri build --bundles nsis
+
+      - name: Manifest
+        working-directory: .
+        run: |
+          INSTALLER=$(ls windows/target/release/bundle/nsis/*-setup.exe | head -1)
+          cp "$INSTALLER" NodeShiftMusic-Setup.exe
+          VERSION=$(jq -r .version windows/src-tauri/tauri.conf.json)
+          SIZE=$(stat -c%s NodeShiftMusic-Setup.exe)
+          SHA=$(sha256sum NodeShiftMusic-Setup.exe | cut -d' ' -f1)
+          NOTES=$(git log -1 --pretty=%s)
+          jq -n \
+            --arg version "$VERSION" \
+            --argjson build ${{ github.run_number }} \
+            --arg commit "$GITHUB_SHA" \
+            --argjson size "$SIZE" \
+            --arg sha256 "$SHA" \
+            --arg notes "$NOTES" \
+            --arg builtAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{platform: "win", version: $version, build: $build, commit: $commit, file: "NodeShiftMusic-Setup.exe", size: $size, sha256: $sha256, minOS: "10", notes: $notes, builtAt: $builtAt}' > update.json
+          cat update.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer
+          path: |
+            NodeShiftMusic-Setup.exe
+            update.json
+
+  smoke:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: installer
+          path: installer
+
+      - name: Install silently
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "installer\NodeShiftMusic-Setup.exe" -ArgumentList "/S" -Wait
+          Get-ChildItem "$env:LOCALAPPDATA" -Directory | Where-Object { $_.Name -like "NS Music*" } | ForEach-Object { Get-ChildItem $_.FullName -Filter *.exe }
+
+      - name: Drive the installed app
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\NS Music" -Filter "*.exe" | Where-Object { $_.Name -notlike "uninstall*" } | Select-Object -First 1
+          node tools/ci/win-smoke.mjs $exe.FullName screens
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-screens
+          path: screens
+
+  publish:
+    needs: [test, build, smoke]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: installer
+          path: installer
+
+      - name: Publish rolling release
+        working-directory: installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view win-latest >/dev/null 2>&1 || gh release create win-latest --prerelease --title "Windows rolling" --notes "rolling build from main"
+          gh release upload win-latest NodeShiftMusic-Setup.exe update.json --clobber
