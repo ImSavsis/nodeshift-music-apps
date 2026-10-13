@@ -43,6 +43,8 @@ final class PlayerStore {
     var seekToken = 0
 
     @ObservationIgnored private var engine: PlaybackEngine?
+    @ObservationIgnored private var localEngine: PlaybackEngine?
+    @ObservationIgnored private var remoteEngine: PlaybackEngine?
     @ObservationIgnored private var ticker: Timer?
     @ObservationIgnored private var history: [Int] = []
     @ObservationIgnored var onTrackStarted: ((TrackRecord) -> Void)?
@@ -58,7 +60,15 @@ final class PlayerStore {
     }
 
     func attach(_ engine: PlaybackEngine) {
+        localEngine = engine
         self.engine = engine
+        engine.onEnded = { [weak self] in
+            self?.handleEnded()
+        }
+    }
+
+    func attachRemote(_ engine: PlaybackEngine) {
+        remoteEngine = engine
         engine.onEnded = { [weak self] in
             self?.handleEnded()
         }
@@ -222,6 +232,13 @@ final class PlayerStore {
         duration = track.durationSeconds
         position = 0
         syncDate = Date()
+        let wanted = track.isRemote ? remoteEngine : localEngine
+        if let active = engine, let wanted, active !== wanted {
+            active.stop()
+        }
+        if let wanted {
+            engine = wanted
+        }
         engine?.load(track, autoplay: autoplay)
         isPlaying = autoplay
         if autoplay {

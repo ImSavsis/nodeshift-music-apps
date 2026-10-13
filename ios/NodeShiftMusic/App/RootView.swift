@@ -80,6 +80,7 @@ struct RootView: View {
             .environment(model.importer)
             .environment(model.site)
             .environment(model.sync)
+            .environment(model.catalog)
             .environment(model.updates)
         }
         .animation(Motion.page, value: tab)

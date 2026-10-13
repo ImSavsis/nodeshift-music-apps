@@ -30,6 +30,18 @@ struct TrackRecord: Identifiable, Hashable, Codable, Sendable {
     var palette: String?
     var lyricsKind: String?
     var lyricsSource: String?
+    var streamURL: URL?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, artist, album, albumArtist, trackNumber, discNumber, year, genre
+        case durationMs, format, bitrateKbps, sampleRate, bitDepth, fileName, fileSize, fileHash
+        case coverName, motionName, motion3x4Name, isFavorite, playCount, lastPlayedAt, addedAt
+        case siteId, bpm, palette, lyricsKind, lyricsSource
+    }
+
+    var isRemote: Bool {
+        streamURL != nil
+    }
 
     var durationSeconds: Double {
         Double(durationMs) / 1000

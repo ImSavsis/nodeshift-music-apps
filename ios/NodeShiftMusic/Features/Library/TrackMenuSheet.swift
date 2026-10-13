@@ -15,7 +15,13 @@ struct TrackMenuSheet: View {
     }
 
     private var entries: [Entry] {
-        [
+        if track.isRemote {
+            return [
+                Entry(id: "next", title: "Играть следом", icon: .listStart, danger: false),
+                Entry(id: "queue", title: "Добавить в очередь", icon: .listEnd, danger: false),
+            ]
+        }
+        return [
             Entry(id: "next", title: "Играть следом", icon: .listStart, danger: false),
             Entry(id: "queue", title: "Добавить в очередь", icon: .listEnd, danger: false),
             Entry(id: "playlist", title: "В плейлист…", icon: .listMusic, danger: false),

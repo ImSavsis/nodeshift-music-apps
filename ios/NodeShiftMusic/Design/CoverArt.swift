@@ -2,13 +2,46 @@ import SwiftUI
 import ImageIO
 import NSMCore
 
+enum CoverSource {
+    static let remotePrefix = "remote:"
+
+    static func isRemote(_ name: String) -> Bool {
+        name.hasPrefix(remotePrefix)
+    }
+
+    static func remoteName(_ filename: String) -> String {
+        remotePrefix + filename
+    }
+
+    static func url(for name: String, maxPixel: Int) -> URL {
+        guard isRemote(name) else {
+            return AppPaths.coverURL(name)
+        }
+        let filename = String(name.dropFirst(remotePrefix.count))
+        return maxPixel <= 520 ? SiteAPI.shared.thumbURL(filename) : SiteAPI.shared.coverURL(filename)
+    }
+
+    static func fullURL(for name: String) -> URL {
+        guard isRemote(name) else {
+            return AppPaths.coverURL(name)
+        }
+        return SiteAPI.shared.coverURL(String(name.dropFirst(remotePrefix.count)))
+    }
+}
+
 final class CoverImageLoader: @unchecked Sendable {
     static let shared = CoverImageLoader()
 
     private let cache = NSCache<NSString, UIImage>()
+    private let session: URLSession
 
     init() {
         cache.countLimit = 400
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
+        configuration.requestCachePolicy = .returnCacheDataElseLoad
+        configuration.timeoutIntervalForRequest = 20
+        session = URLSession(configuration: configuration)
     }
 
     private func key(_ url: URL, _ maxPixel: Int) -> NSString {
@@ -23,13 +56,37 @@ final class CoverImageLoader: @unchecked Sendable {
         if let hit = cached(url: url, maxPixel: maxPixel) {
             return hit
         }
-        let loaded: UIImage? = await Task.detached(priority: .userInitiated) {
-            CoverImageLoader.downsample(url, maxPixel: maxPixel)
-        }.value
+        let loaded: UIImage?
+        if url.isFileURL {
+            loaded = await Task.detached(priority: .userInitiated) {
+                CoverImageLoader.downsample(url, maxPixel: maxPixel)
+            }.value
+        } else {
+            loaded = await remote(url, maxPixel: maxPixel)
+        }
         if let loaded {
             cache.setObject(loaded, forKey: key(url, maxPixel))
         }
         return loaded
+    }
+
+    private func remote(_ url: URL, maxPixel: Int) async -> UIImage? {
+        guard let (data, response) = try? await session.data(from: url),
+              let http = response as? HTTPURLResponse,
+              http.statusCode == 200 else {
+            return nil
+        }
+        return await Task.detached(priority: .userInitiated) {
+            CoverImageLoader.downsample(data: data, maxPixel: maxPixel)
+        }.value
+    }
+
+    static func downsample(data: Data, maxPixel: Int) -> UIImage? {
+        let sourceOptions: [CFString: Any] = [kCGImageSourceShouldCache: false]
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions as CFDictionary) else {
+            return nil
+        }
+        return thumbnail(from: source, maxPixel: maxPixel)
     }
 
     static func downsample(_ url: URL, maxPixel: Int) -> UIImage? {
@@ -37,6 +94,10 @@ final class CoverImageLoader: @unchecked Sendable {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions as CFDictionary) else {
             return nil
         }
+        return thumbnail(from: source, maxPixel: maxPixel)
+    }
+
+    private static func thumbnail(from source: CGImageSource, maxPixel: Int) -> UIImage? {
         let thumbOptions: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceShouldCacheImmediately: true,
@@ -157,11 +218,15 @@ struct CoverArt: View {
             image = nil
             return
         }
-        let url = AppPaths.coverURL(name)
+        let url = CoverSource.url(for: name, maxPixel: maxPixel)
         if let hit = CoverImageLoader.shared.cached(url: url, maxPixel: maxPixel) {
             image = hit
             return
         }
-        image = await CoverImageLoader.shared.image(url: url, maxPixel: maxPixel)
+        var loaded = await CoverImageLoader.shared.image(url: url, maxPixel: maxPixel)
+        if loaded == nil, CoverSource.isRemote(name), maxPixel <= 520 {
+            loaded = await CoverImageLoader.shared.image(url: CoverSource.fullURL(for: name), maxPixel: maxPixel)
+        }
+        image = loaded
     }
 }

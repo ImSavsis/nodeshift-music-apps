@@ -1,67 +1,117 @@
 import SwiftUI
 
+enum LibraryMode: String {
+    case mine
+    case catalog
+}
+
 struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
     @Environment(\.openTab) private var openTab
     @Environment(\.openStorage) private var openStorage
     @Environment(\.s) private var s
+    @State private var chosenMode: LibraryMode?
+
+    private var mode: LibraryMode {
+        if let chosenMode {
+            return chosenMode
+        }
+        if let stored = UserDefaults.standard.string(forKey: "nsm_library_mode"), let value = LibraryMode(rawValue: stored) {
+            return value
+        }
+        return library.loaded && library.tracks.isEmpty ? .catalog : .mine
+    }
 
     var body: some View {
-        @Bindable var library = library
-        let list = library.filtered
         ScreenScroll {
             UpdateBanner()
-            PageHeader(title: "Треки", subtitle: "Вся твоя музыка у тебя на телефоне")
-                .reveal(0)
-            SearchField(text: $library.query, placeholder: "Поиск по трекам")
-                .padding(.bottom, s(14))
+            PageHeader(
+                title: "Треки",
+                subtitle: mode == .catalog ? "Все треки NodeShift, играют онлайн" : "Вся твоя музыка у тебя на телефоне"
+            )
+            .reveal(0)
+            modeSwitch
                 .reveal(1)
-            HStack(spacing: s(10)) {
-                Button(action: playWave) {
-                    ButtonLabel(title: "Случайная волна", icon: .sparkles)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                Button(action: shuffleAll) {
-                    ButtonLabel(title: "Перемешать", icon: .shuffle)
-                }
-                .buttonStyle(GhostButtonStyle())
-            }
-            .padding(.bottom, s(26))
-            .reveal(2)
-
-            if library.tracks.isEmpty {
-                emptyLibrary.reveal(3)
+            if mode == .catalog {
+                CatalogSection()
+                    .reveal(2)
             } else {
-                if library.query.isEmpty && !library.recent.isEmpty {
-                    recentSection.reveal(3)
-                }
-                controls.reveal(4)
-                Eyebrow(text: library.query.isEmpty ? "Библиотека" : "Результаты поиска")
-                    .reveal(4)
-                if list.isEmpty {
-                    Text("Ничего не найдено.")
-                        .font(.nsm(.interRegular, s(14)))
-                        .foregroundStyle(Palette.dim)
-                } else if library.viewMode == .grid {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: s(14), alignment: .top),
-                            GridItem(.flexible(), spacing: s(14), alignment: .top),
-                        ],
-                        spacing: s(24)
-                    ) {
-                        ForEach(Array(list.enumerated()), id: \.element.id) { index, track in
-                            TrackCard(track: track, queue: list)
-                                .stagger(index, rise: 16, step: 0.04)
-                        }
+                mineContent
+            }
+        }
+    }
+
+    private var modeSwitch: some View {
+        HStack(spacing: s(8)) {
+            Chip(title: "Моя музыка", active: mode == .mine) {
+                choose(.mine)
+            }
+            Chip(title: "Весь каталог", active: mode == .catalog, icon: .cloud) {
+                choose(.catalog)
+            }
+        }
+        .padding(.bottom, s(18))
+    }
+
+    private func choose(_ value: LibraryMode) {
+        UserDefaults.standard.set(value.rawValue, forKey: "nsm_library_mode")
+        withAnimation(Motion.expoOut(0.3)) {
+            chosenMode = value
+        }
+    }
+
+    @ViewBuilder
+    private var mineContent: some View {
+        @Bindable var library = library
+        let list = library.filtered
+        SearchField(text: $library.query, placeholder: "Поиск по трекам")
+            .padding(.bottom, s(14))
+            .reveal(1)
+        HStack(spacing: s(10)) {
+            Button(action: playWave) {
+                ButtonLabel(title: "Случайная волна", icon: .sparkles)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            Button(action: shuffleAll) {
+                ButtonLabel(title: "Перемешать", icon: .shuffle)
+            }
+            .buttonStyle(GhostButtonStyle())
+        }
+        .padding(.bottom, s(26))
+        .reveal(2)
+
+        if library.tracks.isEmpty {
+            emptyLibrary.reveal(3)
+        } else {
+            if library.query.isEmpty && !library.recent.isEmpty {
+                recentSection.reveal(3)
+            }
+            controls.reveal(4)
+            Eyebrow(text: library.query.isEmpty ? "Библиотека" : "Результаты поиска")
+                .reveal(4)
+            if list.isEmpty {
+                Text("Ничего не найдено.")
+                    .font(.nsm(.interRegular, s(14)))
+                    .foregroundStyle(Palette.dim)
+            } else if library.viewMode == .grid {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: s(14), alignment: .top),
+                        GridItem(.flexible(), spacing: s(14), alignment: .top),
+                    ],
+                    spacing: s(24)
+                ) {
+                    ForEach(Array(list.enumerated()), id: \.element.id) { index, track in
+                        TrackCard(track: track, queue: list)
+                            .stagger(index, rise: 16, step: 0.04)
                     }
-                } else {
-                    LazyVStack(spacing: s(4)) {
-                        ForEach(Array(list.enumerated()), id: \.element.id) { index, track in
-                            TrackRow(track: track, queue: list)
-                                .stagger(index, rise: 10, step: 0.03)
-                        }
+                }
+            } else {
+                LazyVStack(spacing: s(4)) {
+                    ForEach(Array(list.enumerated()), id: \.element.id) { index, track in
+                        TrackRow(track: track, queue: list)
+                            .stagger(index, rise: 10, step: 0.03)
                     }
                 }
             }

@@ -69,7 +69,30 @@ final class LyricsStore {
         try? database.save(record)
     }
 
+    private func resolveRemote(_ track: TrackRecord) async {
+        guard let siteID = track.siteId, let found = await SiteAPI.shared.lyrics(siteID) else {
+            states[track.id] = LyricsState.none
+            return
+        }
+        if let lrc = found.synced, !lrc.isEmpty {
+            let lines = LRCParser.parse(lrc)
+            if !lines.isEmpty {
+                states[track.id] = .synced(lines, source: found.source)
+                return
+            }
+        }
+        if let plain = found.plain, !plain.isEmpty {
+            states[track.id] = .plain(plain, source: found.source)
+            return
+        }
+        states[track.id] = LyricsState.none
+    }
+
     private func resolve(_ track: TrackRecord, force: Bool) async {
+        if track.isRemote {
+            await resolveRemote(track)
+            return
+        }
         let url = track.fileURL
         if !force {
             let embedded = await Task.detached(priority: .utility) {

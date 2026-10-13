@@ -13,6 +13,7 @@ final class AppModel {
     let sync: SiteSync
     let updates: UpdateChecker
     let enrichment: EnrichmentService
+    let catalog: CatalogStore
     let demo: Bool
     private var nowPlaying: NowPlayingController?
     private var engine: PlaybackEngine?
@@ -60,19 +61,38 @@ final class AppModel {
         updates = updateChecker
         let enrich = EnrichmentService(database: db, lyrics: lyr)
         enrichment = enrich
+        let cat = CatalogStore()
+        catalog = cat
+        cat.attach(library: lib, site: siteSession, toasts: toast)
+        siteSession.onSessionChanged = {
+            Task { await cat.refreshLikes() }
+        }
 
         lyr.database = db
         play.attach(playback)
         lib.attach(db)
         nowPlaying = NowPlayingController(player: play)
         play.onTrackStarted = { track in
-            lib.markPlayed(track.id)
+            if track.isRemote {
+                if let siteID = track.siteId {
+                    Task { await SiteAPI.shared.registerPlay(siteID) }
+                }
+            } else {
+                lib.markPlayed(track.id)
+            }
             Task { await lyr.ensure(track) }
         }
         if let real = playback as? SFBEngine {
             real.onError = { message in
                 toast.show("Не удалось воспроизвести: \(message)")
             }
+        }
+        if !demo {
+            let remote = RemoteEngine()
+            remote.onError = { message in
+                toast.show("Не удалось воспроизвести: \(message)")
+            }
+            play.attachRemote(remote)
         }
         manager.onTrackRemoved = { id in
             play.queue.removeAll { $0.id == id }

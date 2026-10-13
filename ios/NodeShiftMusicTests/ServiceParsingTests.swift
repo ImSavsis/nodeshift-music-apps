@@ -28,6 +28,65 @@ final class ServiceParsingTests: XCTestCase {
         XCTAssertNil(tracks[1].coverFilename)
     }
 
+    func testCatalogRecordStreamsAndKeepsSiteIdentity() throws {
+        let json = """
+        {"id": 53, "title": "Т", "artist": "А", "album": "Alb", "duration_seconds": 201.5, "filename": "x.flac",
+         "cover_filename": "0123456789abcdef0123456789abcdef.jpg", "stream_filename": "x.m4a", "media_kind": "audio",
+         "format": "FLAC", "play_count": 7}
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let site = try decoder.decode(SiteTrack.self, from: Data(json.utf8))
+        let record = site.catalogRecord()
+        XCTAssertEqual(record.id, "site:53")
+        XCTAssertEqual(record.siteId, "53")
+        XCTAssertTrue(record.isRemote)
+        XCTAssertEqual(record.durationMs, 201_500)
+        XCTAssertEqual(record.format, "flac")
+        XCTAssertEqual(record.playCount, 7)
+        XCTAssertEqual(record.streamURL?.absoluteString, "https://burmalda.savsis.xyz/stream/x.m4a")
+        XCTAssertEqual(record.coverName, "remote:0123456789abcdef0123456789abcdef.jpg")
+    }
+
+    func testCatalogRecordFallsBackToOriginalFileWithoutStream() throws {
+        let json = """
+        {"id": "9", "title": "T", "artist": "A", "filename": "y.mp3", "format": "mp3"}
+        """
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let record = try decoder.decode(SiteTrack.self, from: Data(json.utf8)).catalogRecord()
+        XCTAssertEqual(record.streamURL?.absoluteString, "https://burmalda.savsis.xyz/tracks/y.mp3")
+        XCTAssertNil(record.coverName)
+    }
+
+    func testRemoteCoverUsesThumbnailsForSmallSizes() {
+        let name = CoverSource.remoteName("0123456789abcdef0123456789abcdef.png")
+        XCTAssertTrue(CoverSource.isRemote(name))
+        XCTAssertEqual(
+            CoverSource.url(for: name, maxPixel: 480).absoluteString,
+            "https://burmalda.savsis.xyz/thumbs/0123456789abcdef0123456789abcdef.webp"
+        )
+        XCTAssertEqual(
+            CoverSource.url(for: name, maxPixel: 1000).absoluteString,
+            "https://burmalda.savsis.xyz/covers/0123456789abcdef0123456789abcdef.png"
+        )
+        XCTAssertFalse(CoverSource.isRemote("local.jpg"))
+        XCTAssertTrue(CoverSource.url(for: "local.jpg", maxPixel: 480).isFileURL)
+    }
+
+    func testStreamURLIsNotPersistedWithTheRecord() throws {
+        var record = TrackRecord.blank(id: "site:1")
+        record.title = "T"
+        record.artist = "A"
+        record.streamURL = URL(string: "https://example.com/a.m4a")
+        let data = try JSONEncoder().encode(record)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(object["streamURL"])
+        let back = try JSONDecoder().decode(TrackRecord.self, from: data)
+        XCTAssertNil(back.streamURL)
+        XCTAssertFalse(back.isRemote)
+    }
+
     func testPlaylistDetailDecodes() throws {
         let json = """
         {"id": 7, "name": "Mix", "cover_filename": null, "owner_id": 1, "created_at": "2026-10-01T10:00:00",

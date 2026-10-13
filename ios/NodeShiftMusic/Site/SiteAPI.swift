@@ -98,6 +98,8 @@ struct SiteTrack: Decodable, Identifiable, Hashable, Sendable {
     let motionFilename: String?
     let streamFilename: String?
     let format: String?
+    let playCount: Int?
+    let mediaKind: String?
 
     static func == (lhs: SiteTrack, rhs: SiteTrack) -> Bool {
         lhs.id == rhs.id
@@ -125,6 +127,10 @@ struct SitePlaylistDetail: Decodable, Sendable {
     let name: String
     let coverFilename: String?
     let tracks: [Entry]
+}
+
+struct SiteLibraryState: Decodable, Sendable {
+    let favoriteIds: [FlexibleID]
 }
 
 struct SiteLyrics: Decodable, Sendable {
@@ -240,13 +246,14 @@ final class SiteAPI: @unchecked Sendable {
         return token
     }
 
-    private func authorizedData(_ path: String) async throws -> Data {
+    private func authorizedData(_ path: String, method: String = "GET") async throws -> Data {
         var token = tokens().access
         if token == nil {
             token = try await refreshAccess()
         }
         for attempt in 0..<2 {
             var request = Net.request(url(path))
+            request.httpMethod = method
             request.setValue("Bearer \(token ?? "")", forHTTPHeaderField: "Authorization")
             let (data, response) = try await Net.session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SiteError.server(0) }
@@ -278,6 +285,42 @@ final class SiteAPI: @unchecked Sendable {
         try decoder().decode(SitePlaylistDetail.self, from: try await authorizedData("/api/music/playlists/\(id)"))
     }
 
+    func catalog(search: String, sort: String, format: String?, limit: Int, offset: Int) async throws -> [SiteTrack] {
+        var items = ["sort": sort, "limit": String(limit), "offset": String(offset)]
+        if !search.isEmpty {
+            items["search"] = search
+        }
+        if let format {
+            items["format"] = format
+        }
+        guard let link = Net.components(url("/api/music/tracks").absoluteString, items) else {
+            throw SiteError.badCallback
+        }
+        return try decoder().decode([SiteTrack].self, from: try await Net.data(link))
+    }
+
+    func wave(limit: Int) async throws -> [SiteTrack] {
+        guard let link = Net.components(url("/api/music/wave").absoluteString, ["limit": String(limit)]) else {
+            throw SiteError.badCallback
+        }
+        return try decoder().decode([SiteTrack].self, from: try await Net.data(link))
+    }
+
+    func registerPlay(_ trackID: String) async {
+        var request = Net.request(url("/api/music/tracks/\(trackID)/play"))
+        request.httpMethod = "POST"
+        _ = try? await Net.session.data(for: request)
+    }
+
+    func likedIDs() async throws -> Set<String> {
+        let state = try decoder().decode(SiteLibraryState.self, from: try await authorizedData("/api/music/me/library"))
+        return Set(state.favoriteIds.map { $0.value })
+    }
+
+    func setLiked(_ trackID: String, value: Bool) async throws {
+        _ = try await authorizedData("/api/music/favorites/\(trackID)", method: value ? "POST" : "DELETE")
+    }
+
     func lyrics(_ trackID: String) async -> SiteLyrics? {
         guard let data = try? await Net.data(url("/api/music/lyrics/\(trackID)")) else { return nil }
         return try? decoder().decode(SiteLyrics.self, from: data)
@@ -292,6 +335,11 @@ final class SiteAPI: @unchecked Sendable {
 
     func coverURL(_ name: String) -> URL {
         mediaBase.appendingPathComponent("covers").appendingPathComponent(name)
+    }
+
+    func thumbURL(_ name: String) -> URL {
+        let stem = (name as NSString).deletingPathExtension
+        return mediaBase.appendingPathComponent("thumbs").appendingPathComponent("\(stem).webp")
     }
 
     func motionURL(_ name: String) -> URL {

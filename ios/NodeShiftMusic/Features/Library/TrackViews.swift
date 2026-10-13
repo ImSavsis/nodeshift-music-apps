@@ -3,13 +3,14 @@ import SwiftUI
 struct TrackActionsPill: View {
     let track: TrackRecord
     @Environment(LibraryStore.self) private var library
+    @Environment(CatalogStore.self) private var catalog
     @Environment(\.s) private var s
 
     var body: some View {
         HStack(spacing: 0) {
-            IconToggle(icon: .heart, active: track.isFavorite, size: 32, iconSize: 16, filled: track.isFavorite) {
+            IconToggle(icon: .heart, active: catalog.isFavorite(track), size: 32, iconSize: 16, filled: catalog.isFavorite(track)) {
                 withAnimation(Motion.spring) {
-                    library.toggleFavorite(track.id)
+                    catalog.toggleFavorite(track, library: library)
                 }
             }
             IconToggle(icon: .ellipsis, size: 32, iconSize: 16) {
@@ -25,6 +26,7 @@ struct TrackActionsPill: View {
 struct TrackCard: View {
     let track: TrackRecord
     let queue: [TrackRecord]
+    var showsDownloaded = false
     @Environment(PlayerStore.self) private var player
     @Environment(\.s) private var s
 
@@ -75,6 +77,10 @@ struct TrackCard: View {
                         .foregroundStyle(Palette.dim)
                         .lineLimit(1)
                     FormatBadge(format: track.format)
+                    if showsDownloaded && !track.isRemote && track.siteId != nil {
+                        Icon(name: .download, size: s(11), stroke: 2)
+                            .foregroundStyle(Palette.dim)
+                    }
                 }
             }
         }
@@ -93,8 +99,10 @@ struct TrackRow: View {
     let track: TrackRecord
     let queue: [TrackRecord]
     var rank: Int?
+    var showsDownloaded = false
     @Environment(PlayerStore.self) private var player
     @Environment(LibraryStore.self) private var library
+    @Environment(CatalogStore.self) private var catalog
     @Environment(\.s) private var s
 
     private var isCurrent: Bool {
@@ -133,15 +141,19 @@ struct TrackRow: View {
                             .foregroundStyle(Palette.dim)
                             .lineLimit(1)
                         FormatBadge(format: track.format)
+                        if showsDownloaded && !track.isRemote && track.siteId != nil {
+                            Icon(name: .download, size: s(11), stroke: 2)
+                                .foregroundStyle(Palette.dim)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
                 if isCurrent {
                     EqualizerBars(isPlaying: player.isPlaying)
                 }
-                IconToggle(icon: .heart, active: track.isFavorite, size: 32, iconSize: 16, filled: track.isFavorite) {
+                IconToggle(icon: .heart, active: catalog.isFavorite(track), size: 32, iconSize: 16, filled: catalog.isFavorite(track)) {
                     withAnimation(Motion.spring) {
-                        library.toggleFavorite(track.id)
+                        catalog.toggleFavorite(track, library: library)
                     }
                 }
                 IconToggle(icon: .ellipsis, size: 32, iconSize: 16) {

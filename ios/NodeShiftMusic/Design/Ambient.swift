@@ -21,13 +21,25 @@ final class PaletteProvider: @unchecked Sendable {
         if let hit = cached(name) {
             return hit
         }
-        let url = AppPaths.coverURL(name)
-        let computed: [RGB8] = await Task.detached(priority: .utility) {
-            guard let pixels = PaletteProvider.pixels(url: url) else {
-                return PaletteExtractor.fallback
-            }
-            return PaletteExtractor.extract(rgba: pixels)
-        }.value
+        let url = CoverSource.url(for: name, maxPixel: 300)
+        let computed: [RGB8]
+        if url.isFileURL {
+            computed = await Task.detached(priority: .utility) {
+                guard let pixels = PaletteProvider.pixels(url: url) else {
+                    return PaletteExtractor.fallback
+                }
+                return PaletteExtractor.extract(rgba: pixels)
+            }.value
+        } else {
+            let fetched = try? await URLSession.shared.data(from: url)
+            let payload = fetched?.0
+            computed = await Task.detached(priority: .utility) {
+                guard let payload, let pixels = PaletteProvider.pixels(data: payload) else {
+                    return PaletteExtractor.fallback
+                }
+                return PaletteExtractor.extract(rgba: pixels)
+            }.value
+        }
         lock.lock()
         cache[name] = computed
         lock.unlock()
@@ -36,6 +48,15 @@ final class PaletteProvider: @unchecked Sendable {
 
     static func pixels(url: URL) -> [UInt8]? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return pixels(source: source)
+    }
+
+    static func pixels(data: Data) -> [UInt8]? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return pixels(source: source)
+    }
+
+    private static func pixels(source: CGImageSource) -> [UInt8]? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,

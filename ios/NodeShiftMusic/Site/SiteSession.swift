@@ -20,6 +20,7 @@ final class SiteSession {
     @ObservationIgnored private let api = SiteAPI.shared
     @ObservationIgnored private let presentation = AuthPresentation()
     @ObservationIgnored private var webSession: ASWebAuthenticationSession?
+    @ObservationIgnored var onSessionChanged: (() -> Void)?
 
     var isLoggedIn: Bool {
         user != nil
@@ -29,6 +30,7 @@ final class SiteSession {
         guard api.hasSession else { return }
         do {
             user = try await api.me()
+            onSessionChanged?()
         } catch SiteError.unauthorized {
             user = nil
         } catch {
@@ -51,6 +53,7 @@ final class SiteSession {
             let pair = try await api.ssoLogin(token: token, state: state)
             api.setTokens(access: pair.accessToken, refresh: pair.refreshToken)
             user = pair.user
+            onSessionChanged?()
             return true
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
             return false
@@ -66,6 +69,7 @@ final class SiteSession {
     func logout() {
         api.clear()
         user = nil
+        onSessionChanged?()
     }
 
     private func authenticate(_ url: URL) async throws -> URL {

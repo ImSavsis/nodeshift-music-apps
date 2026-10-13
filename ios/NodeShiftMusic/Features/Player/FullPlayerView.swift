@@ -9,6 +9,7 @@ enum PlayerTab: String {
 struct FullPlayerView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(LibraryStore.self) private var library
+    @Environment(CatalogStore.self) private var catalog
     @Environment(LyricsStore.self) private var lyrics
     @Environment(\.s) private var s
     @State private var tab: PlayerTab = .player
@@ -241,10 +242,10 @@ struct FullPlayerView: View {
     private func actions(_ track: TrackRecord?) -> some View {
         HStack(spacing: s(28)) {
             if let track {
-                IconToggle(icon: .heart, active: track.isFavorite, size: 40, iconSize: 19, filled: track.isFavorite) {
+                IconToggle(icon: .heart, active: catalog.isFavorite(track), size: 40, iconSize: 19, filled: catalog.isFavorite(track)) {
                     withAnimation(Motion.spring) {
-                        library.toggleFavorite(track.id)
-                        if let updated = library.track(id: track.id) {
+                        catalog.toggleFavorite(track, library: library)
+                        if !track.isRemote, let updated = library.track(id: track.id) {
                             player.updateTrack(updated)
                         }
                     }

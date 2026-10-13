@@ -7,6 +7,7 @@ import UIKit
 final class NowPlayingController {
     private let player: PlayerStore
     private var artworkCache: [String: MPMediaItemArtwork] = [:]
+    private var fetching: Set<String> = []
 
     init(player: PlayerStore) {
         self.player = player
@@ -89,6 +90,10 @@ final class NowPlayingController {
         if let cached = artworkCache[name] {
             return cached
         }
+        if CoverSource.isRemote(name) {
+            fetchRemoteArtwork(name)
+            return nil
+        }
         let url = AppPaths.coverURL(name)
         guard let image = CoverImageLoader.downsample(url, maxPixel: 1000) else { return nil }
         let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
@@ -98,6 +103,19 @@ final class NowPlayingController {
             artworkCache[name] = artwork
         }
         return artwork
+    }
+
+    private func fetchRemoteArtwork(_ name: String) {
+        guard !fetching.contains(name) else { return }
+        fetching.insert(name)
+        Task { [weak self] in
+            let image = await CoverImageLoader.shared.image(url: CoverSource.url(for: name, maxPixel: 1000), maxPixel: 1000)
+            guard let self else { return }
+            self.fetching.remove(name)
+            guard let image else { return }
+            self.artworkCache[name] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.refresh()
+        }
     }
 
     func refresh() {
