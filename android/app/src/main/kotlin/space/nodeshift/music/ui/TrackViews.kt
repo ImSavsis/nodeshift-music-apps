@@ -56,22 +56,24 @@ import space.nodeshift.music.design.pressable
 @Composable
 fun TrackActionsPill(track: TrackRecord, modifier: Modifier = Modifier) {
     val s = LocalScale.current
-    val library = LocalGraph.current.library
+    val graph = LocalGraph.current
+    val library = graph.library
+    val catalog = graph.catalog
     Row(
         modifier
             .background(Color.Black.copy(alpha = 0.55f), CapsuleShape)
             .border(1.dp, Palette.line2, CapsuleShape)
             .padding(horizontal = s(2)),
     ) {
-        IconToggle(LucideName.Heart, active = track.isFavorite, size = 32f, iconSize = 16f, filled = track.isFavorite) {
-            library.toggleFavorite(track.id)
+        IconToggle(LucideName.Heart, active = catalog.isFavorite(track), size = 32f, iconSize = 16f, filled = catalog.isFavorite(track)) {
+            catalog.toggleFavorite(track)
         }
         IconToggle(LucideName.Ellipsis, size = 32f, iconSize = 16f) { library.menuTrack = track }
     }
 }
 
 @Composable
-fun TrackCard(track: TrackRecord, queue: List<TrackRecord>, modifier: Modifier = Modifier) {
+fun TrackCard(track: TrackRecord, queue: List<TrackRecord>, modifier: Modifier = Modifier, showsDownloaded: Boolean = false) {
     val s = LocalScale.current
     val player = LocalGraph.current.player
     val isCurrent = player.current?.id == track.id
@@ -122,17 +124,21 @@ fun TrackCard(track: TrackRecord, queue: List<TrackRecord>, modifier: Modifier =
             Row(horizontalArrangement = Arrangement.spacedBy(s(6)), verticalAlignment = Alignment.CenterVertically) {
                 NText(track.artist, Face.MonoRegular, 11f, color = Palette.dim, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                 FormatBadge(track.format)
+                if (showsDownloaded && !track.isRemote && track.siteId != null) {
+                    Icon(LucideName.Download, s(11), tint = Palette.dim, stroke = 2f)
+                }
             }
         }
     }
 }
 
 @Composable
-fun TrackRow(track: TrackRecord, queue: List<TrackRecord>, modifier: Modifier = Modifier, rank: Int? = null) {
+fun TrackRow(track: TrackRecord, queue: List<TrackRecord>, modifier: Modifier = Modifier, rank: Int? = null, showsDownloaded: Boolean = false) {
     val s = LocalScale.current
     val graph = LocalGraph.current
     val player = graph.player
     val library = graph.library
+    val catalog = graph.catalog
     val isCurrent = player.current?.id == track.id
     val shape = RoundedCornerShape(s(Radius.tile))
     val fill by animateColorAsState(if (isCurrent) Palette.surface2 else Color.Transparent, Motion.fade(200), label = "rowFill")
@@ -166,11 +172,14 @@ fun TrackRow(track: TrackRecord, queue: List<TrackRecord>, modifier: Modifier = 
             Row(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalAlignment = Alignment.CenterVertically) {
                 NText(track.artist, Face.MonoRegular, 11f, color = Palette.dim, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                 FormatBadge(track.format)
+                if (showsDownloaded && !track.isRemote && track.siteId != null) {
+                    Icon(LucideName.Download, s(11), tint = Palette.dim, stroke = 2f)
+                }
             }
         }
         if (isCurrent) EqualizerBars(player.isPlaying)
-        IconToggle(LucideName.Heart, active = track.isFavorite, size = 32f, iconSize = 16f, filled = track.isFavorite) {
-            library.toggleFavorite(track.id)
+        IconToggle(LucideName.Heart, active = catalog.isFavorite(track), size = 32f, iconSize = 16f, filled = catalog.isFavorite(track)) {
+            catalog.toggleFavorite(track)
         }
         IconToggle(LucideName.Ellipsis, size = 32f, iconSize = 16f) { library.menuTrack = track }
     }

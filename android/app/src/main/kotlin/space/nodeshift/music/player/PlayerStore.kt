@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import space.nodeshift.music.data.AppPaths
 import space.nodeshift.music.data.LibraryStore
 import space.nodeshift.music.data.TrackRecord
+import space.nodeshift.music.design.CoverSource
 import kotlin.math.max
 
 enum class RepeatMode {
@@ -44,6 +45,7 @@ class PlayerStore(
 ) {
     private var controller: MediaController? = null
     private var waiting: ((MediaController) -> Unit)? = null
+    private val remote = HashMap<String, TrackRecord>()
 
     var queueIds by mutableStateOf<List<String>>(emptyList())
         private set
@@ -65,16 +67,18 @@ class PlayerStore(
     var onTrackStarted: ((TrackRecord) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
+    private fun resolve(id: String): TrackRecord? = library.track(id) ?: remote[id]
+
     val queue: List<TrackRecord>
         get() {
             val byId = library.tracks.associateBy { it.id }
-            return queueIds.mapNotNull { byId[it] }
+            return queueIds.mapNotNull { byId[it] ?: remote[it] }
         }
 
     val current: TrackRecord?
         get() {
             val id = queueIds.getOrNull(currentIndex) ?: return null
-            return library.track(id)
+            return resolve(id)
         }
 
     val upcomingCount: Int
@@ -90,7 +94,7 @@ class PlayerStore(
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val id = mediaItem?.mediaId ?: return
-            library.track(id)?.let { onTrackStarted?.invoke(it) }
+            resolve(id)?.let { onTrackStarted?.invoke(it) }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -144,6 +148,8 @@ class PlayerStore(
     fun time(): Double = (controller?.currentPosition ?: 0L) / 1000.0
 
     private fun mediaItem(track: TrackRecord): MediaItem {
+        val streamUrl = track.streamUrl
+        if (streamUrl != null) remote[track.id] = track
         val metadata = MediaMetadata.Builder()
             .setTitle(track.title)
             .setArtist(track.artist)
@@ -151,14 +157,18 @@ class PlayerStore(
             .setDurationMs(track.durationMs.toLong())
             .apply {
                 track.coverName?.let { name ->
-                    val file = AppPaths.coverFile(name)
-                    if (file.exists()) setArtworkUri(Uri.fromFile(file))
+                    if (CoverSource.isRemote(name)) {
+                        setArtworkUri(Uri.parse(CoverSource.fullUrl(name)))
+                    } else {
+                        val file = AppPaths.coverFile(name)
+                        if (file.exists()) setArtworkUri(Uri.fromFile(file))
+                    }
                 }
             }
             .build()
         return MediaItem.Builder()
             .setMediaId(track.id)
-            .setUri(Uri.fromFile(track.file))
+            .setUri(if (streamUrl != null) Uri.parse(streamUrl) else Uri.fromFile(track.file))
             .setMediaMetadata(metadata)
             .build()
     }

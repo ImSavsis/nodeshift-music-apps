@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.RequestBody.Companion.toRequestBody
 import space.nodeshift.music.data.Prefs
 import space.nodeshift.music.net.Net
 import space.nodeshift.music.net.NetException
@@ -116,7 +117,12 @@ data class SiteTrack(
     val motionFilename: String? = null,
     val streamFilename: String? = null,
     val format: String? = null,
+    val playCount: Int? = null,
+    val mediaKind: String? = null,
 )
+
+@Serializable
+data class SiteLibraryState(val favoriteIds: List<FlexibleId> = emptyList())
 
 @Serializable
 data class SitePlaylist(
@@ -208,11 +214,15 @@ object SiteApi {
         }
     }
 
-    private suspend fun authorized(path: String): String {
+    private suspend fun authorized(path: String, method: String = "GET"): String {
         var token = access ?: refreshAccess()
         for (attempt in 0 until 2) {
-            val request = Net.request("$BASE$path", mapOf("Authorization" to "Bearer $token")).build()
-            Net.execute(request).use { response ->
+            val builder = Net.request("$BASE$path", mapOf("Authorization" to "Bearer $token"))
+            when (method) {
+                "POST" -> builder.post(ByteArray(0).toRequestBody())
+                "DELETE" -> builder.delete()
+            }
+            Net.execute(builder.build()).use { response ->
                 if (response.code == 401 && attempt == 0) {
                     token = refreshAccess()
                     return@use
@@ -234,6 +244,35 @@ object SiteApi {
 
     suspend fun playlist(id: String): SitePlaylistDetail = json.decodeFromString(authorized("/api/music/playlists/$id"))
 
+    suspend fun catalog(search: String, sort: String, format: String?, limit: Int, offset: Int): List<SiteTrack> {
+        val items = HashMap<String, String>()
+        items["sort"] = sort
+        items["limit"] = limit.toString()
+        items["offset"] = offset.toString()
+        if (search.isNotEmpty()) items["search"] = search
+        if (format != null) items["format"] = format
+        val link = Net.components("$BASE/api/music/tracks", items) ?: throw SiteException(SiteException.Kind.BadCallback)
+        return json.decodeFromString(Net.text(link))
+    }
+
+    suspend fun wave(limit: Int): List<SiteTrack> {
+        val link = Net.components("$BASE/api/music/wave", mapOf("limit" to limit.toString())) ?: throw SiteException(SiteException.Kind.BadCallback)
+        return json.decodeFromString(Net.text(link))
+    }
+
+    suspend fun registerPlay(trackId: String) {
+        runCatching {
+            Net.execute(Net.request("$BASE/api/music/tracks/$trackId/play").post(ByteArray(0).toRequestBody()).build()).close()
+        }
+    }
+
+    suspend fun likedIds(): Set<String> =
+        json.decodeFromString<SiteLibraryState>(authorized("/api/music/me/library")).favoriteIds.map { it.value }.toSet()
+
+    suspend fun setLiked(trackId: String, value: Boolean) {
+        authorized("/api/music/favorites/$trackId", if (value) "POST" else "DELETE")
+    }
+
     suspend fun lyrics(trackId: String): SiteLyrics? = try {
         json.decodeFromString<SiteLyrics>(Net.text("$BASE/api/music/lyrics/$trackId"))
     } catch (_: Exception) {
@@ -250,6 +289,8 @@ object SiteApi {
     }
 
     fun coverUrl(name: String): String = media("covers", name)
+
+    fun thumbUrl(name: String): String = media("thumbs", name.substringBeforeLast('.') + ".webp")
 
     fun motionUrl(name: String): String = media("motion", name)
 }

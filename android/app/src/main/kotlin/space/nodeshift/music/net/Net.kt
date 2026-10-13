@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
+import okhttp3.Cache
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl
@@ -19,6 +20,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import space.nodeshift.music.data.AppPaths
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -56,6 +58,10 @@ object Net {
         .callTimeout(10, TimeUnit.MINUTES)
         .followRedirects(true)
         .build()
+
+    private val imageClient: OkHttpClient by lazy {
+        client.newBuilder().cache(Cache(AppPaths.imageCacheDir, 128L * 1024 * 1024)).build()
+    }
 
     val json = Json {
         ignoreUnknownKeys = true
@@ -98,6 +104,13 @@ object Net {
 
     suspend fun bytes(url: String, headers: Map<String, String> = emptyMap(), agent: String = USER_AGENT): ByteArray {
         execute(request(url, headers, agent).build()).use { response ->
+            if (!response.isSuccessful) throw NetException(response.code)
+            return withContext(Dispatchers.IO) { response.body.bytes() }
+        }
+    }
+
+    suspend fun imageBytes(url: String): ByteArray {
+        imageClient.newCall(request(url).build()).await().use { response ->
             if (!response.isSuccessful) throw NetException(response.code)
             return withContext(Dispatchers.IO) { response.body.bytes() }
         }

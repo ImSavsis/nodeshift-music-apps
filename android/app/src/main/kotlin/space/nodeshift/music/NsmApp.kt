@@ -15,6 +15,7 @@ import space.nodeshift.music.imports.EnrichmentService
 import space.nodeshift.music.imports.ImportManager
 import space.nodeshift.music.lyrics.LyricsStore
 import space.nodeshift.music.player.PlayerStore
+import space.nodeshift.music.site.CatalogStore
 import space.nodeshift.music.site.SiteApi
 import space.nodeshift.music.site.SiteSession
 import space.nodeshift.music.site.SiteSync
@@ -33,12 +34,19 @@ class AppGraph(app: Application) {
     val sync = SiteSync(database, library)
     val updates = UpdateChecker(app)
     val enrichment = EnrichmentService(database, lyrics, scope)
+    val catalog = CatalogStore(library, site, toasts, scope)
 
     init {
         player.onTrackStarted = { track ->
-            library.markPlayed(track.id)
+            val siteId = track.siteId
+            if (track.isRemote && siteId != null) {
+                scope.launch(Dispatchers.IO) { SiteApi.registerPlay(siteId) }
+            } else {
+                library.markPlayed(track.id)
+            }
             scope.launch { lyrics.ensure(track) }
         }
+        site.onSessionChanged = { scope.launch { catalog.refreshLikes() } }
         player.onError = { message -> toasts.show("Не удалось воспроизвести: $message") }
         importer.onTrackRemoved = { id -> player.removeTrack(id) }
         importer.onTrackAdded = { track -> enrichment.enqueue(track) }

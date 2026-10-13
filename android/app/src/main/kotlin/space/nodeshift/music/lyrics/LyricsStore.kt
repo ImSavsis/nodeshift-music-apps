@@ -11,6 +11,7 @@ import space.nodeshift.music.data.LyricsRecord
 import space.nodeshift.music.data.TrackRecord
 import space.nodeshift.music.imports.TagIO
 import space.nodeshift.music.net.LyricsClient
+import space.nodeshift.music.site.SiteApi
 
 sealed class LyricsState {
     data object Loading : LyricsState()
@@ -72,7 +73,30 @@ class LyricsStore(private val database: AppDatabase) {
         }
     }
 
+    private suspend fun resolveRemote(track: TrackRecord) {
+        val siteId = track.siteId
+        val found = if (siteId == null) null else SiteApi.lyrics(siteId)
+        val synced = found?.synced
+        if (!synced.isNullOrEmpty()) {
+            val lines = LrcParser.parse(synced)
+            if (lines.isNotEmpty()) {
+                states[track.id] = LyricsState.Synced(lines, found?.source)
+                return
+            }
+        }
+        val plain = found?.plain
+        if (!plain.isNullOrEmpty()) {
+            states[track.id] = LyricsState.Plain(plain, found?.source)
+            return
+        }
+        states[track.id] = LyricsState.None
+    }
+
     private suspend fun resolve(track: TrackRecord, force: Boolean) {
+        if (track.isRemote) {
+            resolveRemote(track)
+            return
+        }
         if (!force) {
             val embedded = withContext(Dispatchers.IO) { TagIO.read(track.file)?.lyrics }
             if (!embedded.isNullOrEmpty()) {

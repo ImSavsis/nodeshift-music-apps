@@ -21,14 +21,19 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -43,9 +48,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import space.nodeshift.music.LocalGraph
 import space.nodeshift.music.data.FormatFilter
+import space.nodeshift.music.data.LibraryStore
 import space.nodeshift.music.data.LibrarySort
 import space.nodeshift.music.data.LibraryViewMode
 import space.nodeshift.music.data.PlaylistRecord
+import space.nodeshift.music.data.Prefs
 import space.nodeshift.music.data.TrackRecord
 import space.nodeshift.music.design.CapsuleShape
 import space.nodeshift.music.design.CoverArt
@@ -62,11 +69,14 @@ import space.nodeshift.music.design.PageHeader
 import space.nodeshift.music.design.Palette
 import space.nodeshift.music.design.PrimaryButton
 import space.nodeshift.music.design.Radius
+import space.nodeshift.music.design.Spinner
 import space.nodeshift.music.design.SurfaceCard
 import space.nodeshift.music.design.pluralTracks
 import space.nodeshift.music.design.pressable
 import space.nodeshift.music.design.reveal
 import space.nodeshift.music.design.stagger
+import space.nodeshift.music.player.PlayerStore
+import space.nodeshift.music.site.CatalogStore
 
 fun Modifier.bleed(extra: Dp): Modifier = this.layout { measurable, constraints ->
     val pad = extra.roundToPx()
@@ -110,15 +120,28 @@ private fun Modifier.surfaceBoxCard(radius: Dp): Modifier = this
     .background(Palette.surface, RoundedCornerShape(radius))
     .border(1.dp, Palette.line, RoundedCornerShape(radius))
 
+private enum class LibraryMode { Mine, Catalog }
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen() {
     val s = LocalScale.current
     val graph = LocalGraph.current
     val library = graph.library
+    val catalog = graph.catalog
     val player = graph.player
     val openTab = LocalOpenTab.current
     val openStorage = LocalOpenStorage.current
+    var chosen by remember { mutableStateOf<LibraryMode?>(null) }
+    val mode = chosen ?: when (Prefs.string("nsm_library_mode")) {
+        "mine" -> LibraryMode.Mine
+        "catalog" -> LibraryMode.Catalog
+        else -> if (library.loaded && library.tracks.isEmpty()) LibraryMode.Catalog else LibraryMode.Mine
+    }
+    val pick: (LibraryMode) -> Unit = { value ->
+        Prefs.putString("nsm_library_mode", if (value == LibraryMode.Catalog) "catalog" else "mine")
+        chosen = value
+    }
     val list = library.filtered
     val grid = library.viewMode == LibraryViewMode.Grid
     val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
@@ -136,7 +159,21 @@ fun LibraryScreen() {
     ) {
         item(span = full) { UpdateBanner() }
         item(span = full) {
-            PageHeader("Треки", Modifier.reveal(0), subtitle = "Вся твоя музыка у тебя на телефоне")
+            PageHeader(
+                "Треки",
+                Modifier.reveal(0),
+                subtitle = if (mode == LibraryMode.Catalog) "Все треки NodeShift, играют онлайн" else "Вся твоя музыка у тебя на телефоне",
+            )
+        }
+        item(span = full) {
+            Row(Modifier.padding(bottom = s(18)).reveal(1), horizontalArrangement = Arrangement.spacedBy(s(8))) {
+                Chip("Моя музыка", mode == LibraryMode.Mine) { pick(LibraryMode.Mine) }
+                Chip("Весь каталог", mode == LibraryMode.Catalog, icon = LucideName.Cloud) { pick(LibraryMode.Catalog) }
+            }
+        }
+        if (mode == LibraryMode.Catalog) {
+            catalogItems(catalog, library, player, full, grid)
+            return@LazyVerticalGrid
         }
         item(span = full) {
             SearchField(library.query, "Поиск по трекам", { library.query = it }, Modifier.padding(bottom = s(14)).reveal(1))
@@ -220,6 +257,95 @@ fun LibraryScreen() {
                     } else {
                         TrackRow(track, list, Modifier.stagger(position, 10f, 30))
                     }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+private fun LazyGridScope.catalogItems(
+    catalog: CatalogStore,
+    library: LibraryStore,
+    player: PlayerStore,
+    full: LazyGridItemSpanScope.() -> GridItemSpan,
+    grid: Boolean,
+) {
+    item(span = full) {
+        val s = LocalScale.current
+        LaunchedEffect(Unit) { catalog.startIfNeeded() }
+        SearchField(catalog.query, "Поиск по всем трекам сайта", { catalog.changeQuery(it) }, Modifier.padding(bottom = s(14)).reveal(2))
+    }
+    item(span = full) {
+        val s = LocalScale.current
+        val scope = rememberCoroutineScope()
+        Row(Modifier.padding(bottom = s(26)).reveal(2), horizontalArrangement = Arrangement.spacedBy(s(10))) {
+            PrimaryButton("Случайная волна", icon = LucideName.Sparkles) {
+                scope.launch {
+                    val picked = catalog.wave()
+                    val first = picked.firstOrNull() ?: return@launch
+                    player.applyShuffle(true)
+                    player.play(first, picked)
+                }
+            }
+            GhostButton("Перемешать", icon = LucideName.Shuffle) {
+                val all = catalog.tracks.shuffled()
+                val first = all.firstOrNull() ?: return@GhostButton
+                player.applyShuffle(true)
+                player.play(first, all)
+            }
+        }
+    }
+    item(span = full) {
+        val s = LocalScale.current
+        Column(Modifier.padding(bottom = s(26)), verticalArrangement = Arrangement.spacedBy(s(8))) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
+                for (sort in LibrarySort.entries) Chip(sort.label, catalog.sort == sort) { catalog.changeSort(sort) }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
+                for (filter in FormatFilter.entries) Chip(filter.label, catalog.formatFilter == filter) { catalog.changeFormat(filter) }
+                Chip("Сеткой", library.viewMode == LibraryViewMode.Grid, icon = LucideName.LayoutGrid) {
+                    library.changeViewMode(LibraryViewMode.Grid)
+                }
+                Chip("Списком", library.viewMode == LibraryViewMode.List, icon = LucideName.LayoutList) {
+                    library.changeViewMode(LibraryViewMode.List)
+                }
+            }
+        }
+    }
+    item(span = full) {
+        Eyebrow(if (catalog.query.isEmpty()) "Каталог сайта" else "Результаты поиска", Modifier, bottom = if (grid) 0f else 10f)
+    }
+    val list = catalog.tracks
+    if (list.isEmpty()) {
+        item(span = full) {
+            val s = LocalScale.current
+            when {
+                catalog.isLoading -> Box(Modifier.fillMaxWidth().padding(vertical = s(40)), contentAlignment = Alignment.Center) {
+                    Spinner(s(24))
+                }
+                catalog.failed -> Column(verticalArrangement = Arrangement.spacedBy(s(12))) {
+                    NText("Не получилось загрузить каталог. Проверь интернет.", Face.InterRegular, 14f, color = Palette.dim)
+                    GhostButton("Повторить", icon = LucideName.RefreshCw) { catalog.reload() }
+                }
+                else -> NText("Ничего не найдено.", Face.InterRegular, 14f, color = Palette.dim)
+            }
+        }
+    } else {
+        items(list, key = { it.id }) { track ->
+            val position = list.indexOf(track) % CatalogStore.PAGE_SIZE
+            if (grid) {
+                TrackCard(track, list, Modifier.stagger(position, 16f, 40), showsDownloaded = true)
+            } else {
+                TrackRow(track, list, Modifier.stagger(position, 10f, 30), showsDownloaded = true)
+            }
+        }
+        if (catalog.hasMore) {
+            item(span = full) {
+                val s = LocalScale.current
+                LaunchedEffect(list.size) { catalog.loadMore() }
+                Box(Modifier.fillMaxWidth().padding(vertical = s(12)), contentAlignment = Alignment.Center) {
+                    Spinner(s(22))
                 }
             }
         }
@@ -412,13 +538,20 @@ fun TrackMenuSheet() {
                 NText(track.title, Face.UnboundedSemibold, 14f, color = Palette.white, tracking = -0.025f, maxLines = 1)
                 NText(track.artist, Face.MonoRegular, 11f, color = Palette.dim, maxLines = 1)
             }
-            val entries = listOf(
-                MenuEntry("next", "Играть следом", LucideName.ListStart, false),
-                MenuEntry("queue", "Добавить в очередь", LucideName.ListEnd, false),
-                MenuEntry("playlist", "В плейлист…", LucideName.ListMusic, false),
-                MenuEntry("edit", "Редактировать", LucideName.Pencil, false),
-                MenuEntry("delete", "Удалить с телефона", LucideName.Trash2, true),
-            )
+            val entries = if (track.isRemote) {
+                listOf(
+                    MenuEntry("next", "Играть следом", LucideName.ListStart, false),
+                    MenuEntry("queue", "Добавить в очередь", LucideName.ListEnd, false),
+                )
+            } else {
+                listOf(
+                    MenuEntry("next", "Играть следом", LucideName.ListStart, false),
+                    MenuEntry("queue", "Добавить в очередь", LucideName.ListEnd, false),
+                    MenuEntry("playlist", "В плейлист…", LucideName.ListMusic, false),
+                    MenuEntry("edit", "Редактировать", LucideName.Pencil, false),
+                    MenuEntry("delete", "Удалить с телефона", LucideName.Trash2, true),
+                )
+            }
             for (entry in entries) {
                 Row(
                     Modifier

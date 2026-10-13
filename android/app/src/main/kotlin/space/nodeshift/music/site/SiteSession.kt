@@ -21,6 +21,8 @@ class SiteSession {
     private var pending: CompletableDeferred<Uri?>? = null
     private var tabOpen = false
 
+    var onSessionChanged: (() -> Unit)? = null
+
     val isLoggedIn: Boolean
         get() = user != null
 
@@ -28,6 +30,7 @@ class SiteSession {
         if (!SiteApi.hasSession) return
         try {
             user = SiteApi.me()
+            onSessionChanged?.invoke()
         } catch (error: SiteException) {
             if (error.kind == SiteException.Kind.Unauthorized) user = null
         } catch (_: Exception) {
@@ -55,6 +58,7 @@ class SiteSession {
             val pair = SiteApi.ssoLogin(token, state)
             SiteApi.setTokens(pair.accessToken, pair.refreshToken)
             user = pair.user
+            onSessionChanged?.invoke()
             return true
         } catch (error: SiteException) {
             lastError = if (error.kind == SiteException.Kind.BadCallback) {
@@ -87,5 +91,6 @@ class SiteSession {
     fun logout() {
         SiteApi.clear()
         user = null
+        onSessionChanged?.invoke()
     }
 }

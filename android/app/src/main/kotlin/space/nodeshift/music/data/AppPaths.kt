@@ -19,6 +19,7 @@ object AppPaths {
     val motionDir: File get() = directory("motion")
     val scratchDir: File get() = directory("nsm-scratch", cache)
     val updatesDir: File get() = directory("updates", cache)
+    val imageCacheDir: File get() = directory("http-images", cache)
     val databaseFile: File get() = File(base, "library.sqlite")
 
     fun trackFile(name: String): File = File(tracksDir, name)

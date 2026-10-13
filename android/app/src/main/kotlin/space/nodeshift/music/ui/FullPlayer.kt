@@ -246,8 +246,8 @@ private fun PlayerPane(track: TrackRecord?) {
                 }
                 if (track != null) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(s(28), Alignment.CenterHorizontally)) {
-                        IconToggle(LucideName.Heart, active = track.isFavorite, size = 40f, iconSize = 19f, filled = track.isFavorite) {
-                            library.toggleFavorite(track.id)
+                        IconToggle(LucideName.Heart, active = graph.catalog.isFavorite(track), size = 40f, iconSize = 19f, filled = graph.catalog.isFavorite(track)) {
+                            graph.catalog.toggleFavorite(track)
                         }
                         IconToggle(LucideName.ListPlus, size = 40f, iconSize = 19f) { library.menuTrack = track }
                         IconToggle(LucideName.Ellipsis, size = 40f, iconSize = 19f) { library.menuTrack = track }

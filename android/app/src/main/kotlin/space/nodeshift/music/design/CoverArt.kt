@@ -45,9 +45,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import space.nodeshift.music.core.CoverMotion
 import space.nodeshift.music.data.AppPaths
+import space.nodeshift.music.net.Net
+import space.nodeshift.music.site.SiteApi
 import java.io.File
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 import kotlin.math.min
+
+object CoverSource {
+    const val PREFIX = "remote:"
+
+    fun isRemote(name: String): Boolean = name.startsWith(PREFIX)
+
+    fun remoteName(filename: String): String = PREFIX + filename
+
+    fun url(name: String, maxPixel: Int): String {
+        val filename = name.removePrefix(PREFIX)
+        return if (maxPixel <= 520) SiteApi.thumbUrl(filename) else SiteApi.coverUrl(filename)
+    }
+
+    fun fullUrl(name: String): String = SiteApi.coverUrl(name.removePrefix(PREFIX))
+}
 
 object CoverImageLoader {
     private val cache = object : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
@@ -60,7 +78,11 @@ object CoverImageLoader {
 
     suspend fun image(name: String, maxPixel: Int): ImageBitmap? {
         cached(name, maxPixel)?.let { return it }
-        val loaded = withContext(Dispatchers.IO) { decode(AppPaths.coverFile(name), maxPixel) }
+        val loaded = if (CoverSource.isRemote(name)) {
+            loadRemote(name, maxPixel)
+        } else {
+            withContext(Dispatchers.IO) { decode(AppPaths.coverFile(name), maxPixel) }
+        }
         if (loaded != null) cache.put(key(name, maxPixel), loaded)
         return loaded
     }
@@ -69,18 +91,55 @@ object CoverImageLoader {
         cache.snapshot().keys.filter { it.startsWith("$name#") }.forEach { cache.remove(it) }
     }
 
+    private suspend fun loadRemote(name: String, maxPixel: Int): ImageBitmap? {
+        val primary = fetch(CoverSource.url(name, maxPixel), maxPixel)
+        if (primary != null || maxPixel > 520) return primary
+        return fetch(CoverSource.fullUrl(name), maxPixel)
+    }
+
+    private suspend fun fetch(url: String, maxPixel: Int): ImageBitmap? {
+        val bytes = try {
+            Net.imageBytes(url)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            return null
+        }
+        return withContext(Dispatchers.IO) { decode(bytes, maxPixel) }
+    }
+
+    private fun decode(bytes: ByteArray, maxPixel: Int): ImageBitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxPixel)
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
+        return fit(decoded, maxPixel)
+    }
+
     private fun decode(file: File, maxPixel: Int): ImageBitmap? {
         if (!file.exists()) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        var sample = 1
-        while (min(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPixel) sample *= 2
         val options = BitmapFactory.Options().apply {
-            inSampleSize = sample
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxPixel)
             inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
         }
         val decoded = BitmapFactory.decodeFile(file.path, options) ?: return null
+        return fit(decoded, maxPixel)
+    }
+
+    private fun sampleSize(width: Int, height: Int, maxPixel: Int): Int {
+        var sample = 1
+        while (min(width, height) / (sample * 2) >= maxPixel) sample *= 2
+        return sample
+    }
+
+    private fun fit(decoded: android.graphics.Bitmap, maxPixel: Int): ImageBitmap {
         val longest = max(decoded.width, decoded.height)
         if (longest <= maxPixel * 3 / 2) return decoded.asImageBitmap()
         val ratio = maxPixel.toFloat() / longest

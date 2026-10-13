@@ -32,7 +32,11 @@ data class TrackRecord(
     val palette: String? = null,
     val lyricsKind: String? = null,
     val lyricsSource: String? = null,
+    val streamUrl: String? = null,
 ) {
+    val isRemote: Boolean
+        get() = streamUrl != null
+
     val durationSeconds: Double
         get() = durationMs / 1000.0
 

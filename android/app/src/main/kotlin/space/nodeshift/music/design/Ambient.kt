@@ -26,7 +26,9 @@ import space.nodeshift.music.core.AmbientMotion
 import space.nodeshift.music.core.PaletteExtractor
 import space.nodeshift.music.core.Rgb8
 import space.nodeshift.music.data.AppPaths
+import space.nodeshift.music.net.Net
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -40,23 +42,39 @@ object PaletteProvider {
     suspend fun palette(coverName: String?): List<Rgb8> {
         val name = coverName ?: return PaletteExtractor.fallback
         cache[name]?.let { return it }
-        val computed = withContext(Dispatchers.Default) {
-            val pixels = pixels(name) ?: return@withContext PaletteExtractor.fallback
-            PaletteExtractor.extract(pixels)
+        val computed = if (CoverSource.isRemote(name)) {
+            val bytes = try {
+                Net.imageBytes(CoverSource.url(name, 300))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            withContext(Dispatchers.Default) {
+                val pixels = bytes?.let { remotePixels(it) } ?: return@withContext PaletteExtractor.fallback
+                PaletteExtractor.extract(pixels)
+            }
+        } else {
+            withContext(Dispatchers.Default) {
+                val pixels = pixels(name) ?: return@withContext PaletteExtractor.fallback
+                PaletteExtractor.extract(pixels)
+            }
         }
         cache[name] = computed
         return computed
     }
 
-    private fun pixels(name: String): ByteArray? {
-        val file = AppPaths.coverFile(name)
-        if (!file.exists()) return null
+    private fun remotePixels(bytes: ByteArray): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, bounds)
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
         while (min(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 96) sample *= 2
-        val decoded = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        return rgba(decoded)
+    }
+
+    private fun rgba(decoded: Bitmap): ByteArray {
         val scaled = Bitmap.createScaledBitmap(decoded, 48, 48, true)
         val argb = IntArray(48 * 48)
         scaled.getPixels(argb, 0, 48, 0, 0, 48, 48)
@@ -71,6 +89,18 @@ object PaletteProvider {
         if (scaled !== decoded) scaled.recycle()
         decoded.recycle()
         return rgba
+    }
+
+    private fun pixels(name: String): ByteArray? {
+        val file = AppPaths.coverFile(name)
+        if (!file.exists()) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (min(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 96) sample *= 2
+        val decoded = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        return rgba(decoded)
     }
 }
 
