@@ -218,12 +218,12 @@ class PlayerStore(
         }
     }
 
-    fun setShuffle(value: Boolean) {
+    fun applyShuffle(value: Boolean) {
         shuffle = value
         withController { it.shuffleModeEnabled = value }
     }
 
-    fun toggleShuffle() = setShuffle(!shuffle)
+    fun toggleShuffle() = applyShuffle(!shuffle)
 
     fun cycleRepeat() {
         val target = repeatMode.next

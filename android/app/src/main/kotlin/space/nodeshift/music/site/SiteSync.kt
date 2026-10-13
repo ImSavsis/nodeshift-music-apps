@@ -54,7 +54,7 @@ class SiteSync(
 
     private var running = false
 
-    fun setLossless(value: Boolean) {
+    fun applyLossless(value: Boolean) {
         lossless = value
         Prefs.putBool("nsm_lossless", value)
     }

@@ -175,8 +175,8 @@ fun StorageScreen(onClose: () -> Unit) {
                     Column(verticalArrangement = Arrangement.spacedBy(s(10))) {
                         Eyebrow("Качество при скачивании", bottom = 0f)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
-                            Chip("Без потерь", sync.lossless) { sync.setLossless(true) }
-                            Chip("Быстро (AAC)", !sync.lossless) { sync.setLossless(false) }
+                            Chip("Без потерь", sync.lossless) { sync.applyLossless(true) }
+                            Chip("Быстро (AAC)", !sync.lossless) { sync.applyLossless(false) }
                         }
                         NText(
                             if (sync.lossless) {

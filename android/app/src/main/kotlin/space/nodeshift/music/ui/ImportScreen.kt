@@ -47,6 +47,7 @@ import space.nodeshift.music.imports.ImportItem
 import space.nodeshift.music.imports.ImportSource
 import space.nodeshift.music.imports.ImportState
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ImportRow(item: ImportItem) {
     val s = LocalScale.current
@@ -80,7 +81,6 @@ private fun ImportRow(item: ImportItem) {
             }
         }
         if (item.state is ImportState.Duplicate) {
-            @OptIn(ExperimentalLayoutApi::class)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
                 Chip("Пропустить", false) { importer.decide(item.id, DuplicateDecision.Skip) }
                 Chip("Оставить оба", false) { importer.decide(item.id, DuplicateDecision.KeepBoth) }

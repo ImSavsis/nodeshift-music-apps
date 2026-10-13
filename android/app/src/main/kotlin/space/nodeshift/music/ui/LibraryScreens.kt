@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -119,7 +120,7 @@ fun LibraryScreen() {
     val openTab = LocalOpenTab.current
     val list = library.filtered
     val grid = library.viewMode == LibraryViewMode.Grid
-    val full = GridItemSpan(Int.MAX_VALUE)
+    val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(if (grid) 2 else 1),
         modifier = Modifier.fillMaxWidth(),
@@ -132,31 +133,31 @@ fun LibraryScreen() {
         horizontalArrangement = Arrangement.spacedBy(s(14)),
         verticalArrangement = Arrangement.spacedBy(if (grid) s(24) else s(4)),
     ) {
-        item(span = { full }) { UpdateBanner() }
-        item(span = { full }) {
+        item(span = full) { UpdateBanner() }
+        item(span = full) {
             PageHeader("Треки", Modifier.reveal(0), subtitle = "Вся твоя музыка у тебя на телефоне")
         }
-        item(span = { full }) {
+        item(span = full) {
             SearchField(library.query, "Поиск по трекам", { library.query = it }, Modifier.padding(bottom = s(14)).reveal(1))
         }
-        item(span = { full }) {
+        item(span = full) {
             Row(Modifier.padding(bottom = s(26)).reveal(2), horizontalArrangement = Arrangement.spacedBy(s(10))) {
                 PrimaryButton("Случайная волна", icon = LucideName.Sparkles) {
                     val picked = library.tracks.shuffled().take(40)
                     val first = picked.firstOrNull() ?: return@PrimaryButton
-                    player.setShuffle(true)
+                    player.applyShuffle(true)
                     player.play(first, picked)
                 }
                 GhostButton("Перемешать", icon = LucideName.Shuffle) {
                     val all = library.filtered.shuffled()
                     val first = all.firstOrNull() ?: return@GhostButton
-                    player.setShuffle(true)
+                    player.applyShuffle(true)
                     player.play(first, all)
                 }
             }
         }
         if (library.tracks.isEmpty()) {
-            item(span = { full }) {
+            item(span = full) {
                 SurfaceCard(Modifier.reveal(3)) {
                     Column(verticalArrangement = Arrangement.spacedBy(s(14))) {
                         CrystalMark(s(40), dim = true)
@@ -174,7 +175,7 @@ fun LibraryScreen() {
         } else {
             val recent = library.recent
             if (library.query.isEmpty() && recent.isNotEmpty()) {
-                item(span = { full }) {
+                item(span = full) {
                     Column(Modifier.padding(bottom = s(26)).reveal(3)) {
                         Eyebrow("Недавно слушали")
                         LazyRow(
@@ -188,7 +189,7 @@ fun LibraryScreen() {
                     }
                 }
             }
-            item(span = { full }) {
+            item(span = full) {
                 Column(Modifier.padding(bottom = s(26)).reveal(4), verticalArrangement = Arrangement.spacedBy(s(8))) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
                         for (sort in LibrarySort.entries) Chip(sort.label, library.sort == sort) { library.sort = sort }
@@ -204,11 +205,11 @@ fun LibraryScreen() {
                     }
                 }
             }
-            item(span = { full }) {
+            item(span = full) {
                 Eyebrow(if (library.query.isEmpty()) "Библиотека" else "Результаты поиска", Modifier.reveal(4))
             }
             if (list.isEmpty()) {
-                item(span = { full }) { NText("Ничего не найдено.", Face.InterRegular, 14f, color = Palette.dim) }
+                item(span = full) { NText("Ничего не найдено.", Face.InterRegular, 14f, color = Palette.dim) }
             } else {
                 items(list, key = { it.id }) { track ->
                     val position = list.indexOf(track)
@@ -266,13 +267,13 @@ fun FavoritesScreen() {
                 Row(Modifier.padding(bottom = s(22)).reveal(1), horizontalArrangement = Arrangement.spacedBy(s(10))) {
                     PrimaryButton("Слушать", icon = LucideName.Play) {
                         val first = list.firstOrNull() ?: return@PrimaryButton
-                        player.setShuffle(false)
+                        player.applyShuffle(false)
                         player.play(first, list)
                     }
                     GhostButton("Перемешать", icon = LucideName.Shuffle) {
                         val shuffled = list.shuffled()
                         val first = shuffled.firstOrNull() ?: return@GhostButton
-                        player.setShuffle(true)
+                        player.applyShuffle(true)
                         player.play(first, shuffled)
                     }
                 }
@@ -301,7 +302,7 @@ fun PlaylistsScreen() {
     val counts by produceState(emptyMap<String, Int>(), library.playlists, library.tracks.size) {
         value = withContext(Dispatchers.IO) { library.playlists.associate { it.id to graph.database.trackIds(it.id).size } }
     }
-    val full = GridItemSpan(Int.MAX_VALUE)
+    val full: LazyGridItemSpanScope.() -> GridItemSpan = { GridItemSpan(maxLineSpan) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxWidth(),
@@ -314,8 +315,8 @@ fun PlaylistsScreen() {
         horizontalArrangement = Arrangement.spacedBy(s(14)),
         verticalArrangement = Arrangement.spacedBy(s(24)),
     ) {
-        item(span = { full }) { PageHeader("Плейлисты", Modifier.reveal(0), subtitle = "Ваши подборки") }
-        item(span = { full }) {
+        item(span = full) { PageHeader("Плейлисты", Modifier.reveal(0), subtitle = "Ваши подборки") }
+        item(span = full) {
             GhostButton("Скачать плейлисты с сайта", Modifier.padding(bottom = s(8)).reveal(1), icon = LucideName.CloudDownload) { openStorage() }
         }
         item {
@@ -348,13 +349,13 @@ fun PlaylistsScreen() {
                 scope.launch {
                     val tracks = library.playlistTracks(playlist)
                     val first = tracks.firstOrNull() ?: return@launch
-                    player.setShuffle(false)
+                    player.applyShuffle(false)
                     player.play(first, tracks)
                 }
             }
         }
         if (albums.isNotEmpty()) {
-            item(span = { full }) { Eyebrow("Альбомы", Modifier.padding(top = s(6))) }
+            item(span = full) { Eyebrow("Альбомы", Modifier.padding(top = s(6))) }
             items(albums, key = { "a-" + it.first }) { (name, tracks) ->
                 CollectionTile(
                     title = name,
@@ -363,7 +364,7 @@ fun PlaylistsScreen() {
                     modifier = Modifier.stagger(albums.indexOfFirst { it.first == name } + 1, 16f, 50),
                 ) {
                     val first = tracks.firstOrNull() ?: return@CollectionTile
-                    player.setShuffle(false)
+                    player.applyShuffle(false)
                     player.play(first, tracks)
                 }
             }
