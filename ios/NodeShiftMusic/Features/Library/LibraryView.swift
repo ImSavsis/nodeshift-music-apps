@@ -4,6 +4,7 @@ struct LibraryView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
     @Environment(\.openTab) private var openTab
+    @Environment(\.openStorage) private var openStorage
     @Environment(\.s) private var s
 
     var body: some View {
@@ -127,7 +128,7 @@ struct LibraryView: View {
                 Text("Пока пусто")
                     .font(.nsm(.unboundedSemibold, s(16)))
                     .foregroundStyle(Palette.white)
-                Text("Добавь треки через вкладку «Импорт»: файлы, папки или архивы. Названия, альбомы и обложки подтянутся сами.")
+                Text("Добавь треки через вкладку «Импорт»: файлы, папки или архивы. Названия, альбомы и обложки подтянутся сами. Или войди через сайт и скачай свои плейлисты и лайки.")
                     .font(.nsm(.interRegular, s(13.5)))
                     .foregroundStyle(Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -137,6 +138,10 @@ struct LibraryView: View {
                     ButtonLabel(title: "Открыть импорт", icon: .upload)
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                Button(action: openStorage) {
+                    ButtonLabel(title: "Скачать с сайта", icon: .cloudDownload)
+                }
+                .buttonStyle(GhostButtonStyle())
             }
         }
     }

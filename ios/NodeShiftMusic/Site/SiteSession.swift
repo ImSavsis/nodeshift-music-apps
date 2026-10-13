@@ -54,8 +54,11 @@ final class SiteSession {
             return true
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
             return false
+        } catch SiteError.badCallback {
+            lastError = "Сайт не вернул данные для входа. Попробуй войти ещё раз."
+            return false
         } catch {
-            lastError = "Не получилось войти. Если входишь через Google или Telegram, попробуй почту и пароль."
+            lastError = "Не получилось войти. Проверь интернет и попробуй ещё раз."
             return false
         }
     }
