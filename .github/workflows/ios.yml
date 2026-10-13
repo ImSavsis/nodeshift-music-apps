@@ -127,7 +127,7 @@ jobs:
       - name: Build for testing
         working-directory: ios
         run: |
-          xcodebuild build-for-testing             -project NodeShiftMusic.xcodeproj             -scheme NodeShiftMusic             -configuration Debug             -sdk iphonesimulator             -destination 'platform=iOS Simulator,name=iPhone 17 Pro'             -derivedDataPath build-sim             -clonedSourcePackagesDirPath build-sim/SourcePackages             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""
+          xcodebuild build-for-testing             -project NodeShiftMusic.xcodeproj             -scheme NodeShiftMusic             -configuration Debug             -sdk iphonesimulator             -destination 'platform=iOS Simulator,name=iPhone 17 Pro'             -derivedDataPath build-sim             -clonedSourcePackagesDirPath build-sim/SourcePackages             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             ARCHS=arm64             ONLY_ACTIVE_ARCH=YES
 
       - name: Unit tests
         id: tests

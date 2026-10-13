@@ -46,7 +46,7 @@ shoot_device() {
   fi
   stamp "booted $name"
   tmo 30 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
-  tmo 180 xcrun simctl install "$udid" "$APP" || return
+  tmo 480 xcrun simctl install "$udid" "$APP" || return
   for route in $routes; do
     case "$route" in
       library) args="-nsm-demo" ;;
@@ -63,6 +63,6 @@ shoot_device() {
 }
 
 shoot_device "iPhone 17 Pro" "library playing list playlists favorites import more storage player lyrics queue"
-shoot_device "iPhone 16e" "library player lyrics more"
-shoot_device "iPhone 17 Pro Max" "library player lyrics more"
+shoot_device "iPhone 16e" "library player lyrics"
+shoot_device "iPhone 17 Pro Max" "library player lyrics"
 ls -l "$OUT"
