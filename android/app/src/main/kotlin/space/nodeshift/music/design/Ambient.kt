@@ -158,7 +158,7 @@ fun AmbientBackdrop(
             drawRect(
                 Brush.verticalGradient(listOf(Palette.bg.copy(alpha = 0.2f), Palette.bg.copy(alpha = 0.7f))),
             )
-            drawRect(NoiseTile.shader, alpha = 0.07f, blendMode = BlendMode.SoftLight)
+            drawRect(NoiseTile.shader, alpha = 0.07f, blendMode = BlendMode.Softlight)
         }
     }
 }

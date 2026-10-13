@@ -23,7 +23,7 @@ enum class FormatFilter(val label: String) {
 
 enum class LibraryViewMode { Grid, List }
 
-private val marks = Regex("\p{M}+")
+private val marks = Regex("\\p{M}+")
 
 private fun fold(text: String): String =
     Normalizer.normalize(text, Normalizer.Form.NFD).replace(marks, "").lowercase()

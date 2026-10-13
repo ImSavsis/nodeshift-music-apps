@@ -206,7 +206,7 @@ fun CoverArt(
                                     start = Offset(size.width * -0.102f, size.height * 0.219f),
                                     end = Offset(size.width * 1.102f, size.height * 0.781f),
                                 ),
-                                blendMode = BlendMode.SoftLight,
+                                blendMode = BlendMode.Softlight,
                             )
                         }
                     },
