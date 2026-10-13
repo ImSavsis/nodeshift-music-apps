@@ -703,6 +703,9 @@ impl Engine {
     }
 
     fn enrich(&self, track: Track) {
+        if self.inner.catalog.is_none() {
+            return;
+        }
         let engine = self.clone();
         self.inner.runtime.spawn(async move {
             let _ = engine.lyrics(&track.id, false).await;

@@ -306,6 +306,22 @@ fn handle_url(app: &AppHandle, link: &str) {
     focus_main(app);
 }
 
+fn open_main_window(app: &tauri::App) -> tauri::Result<()> {
+    let Some(config) = app.config().app.windows.first().cloned() else {
+        return Ok(());
+    };
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+    #[cfg(windows)]
+    if let Some(port) = std::env::var("NSM_DEBUG_PORT").ok().filter(|value| !value.is_empty()) {
+        builder = builder.additional_browser_args(&format!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port} --remote-allow-origins=* --disable-gpu"
+        ));
+    }
+    builder.build()?;
+    Ok(())
+}
+
 fn install_panic_log() {
     std::panic::set_hook(Box::new(|info| {
         let path = std::env::temp_dir().join("nodeshift-music-panic.log");
@@ -344,9 +360,11 @@ pub fn run() {
             let emit: Emit = Arc::new(move |event| forward(&handle, event));
             let tokens = Arc::new(secure::DpapiStore::open(base.join("tokens.dat")));
             let runtime = tauri::async_runtime::handle().inner().clone();
-            let engine = Engine::new(EngineConfig { paths, catalog: CatalogSource::Network, tokens, emit, runtime })?;
+            let catalog = if std::env::var_os("NSM_OFFLINE").is_some() { CatalogSource::None } else { CatalogSource::Network };
+            let engine = Engine::new(EngineConfig { paths, catalog, tokens, emit, runtime })?;
             let media = tauri::async_runtime::block_on(media_server::start(engine.clone()))?;
             app.manage(AppState { engine: engine.clone(), media });
+            open_main_window(app)?;
 
             let deep = app.deep_link();
             #[cfg(any(windows, target_os = "linux"))]

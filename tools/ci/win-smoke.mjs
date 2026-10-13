@@ -72,9 +72,10 @@ const child = spawn(exe, [], {
   env: {
     ...process.env,
     NSM_MUTE: '1',
+    NSM_OFFLINE: '1',
     NSM_DATA_DIR: dataDir,
     WEBVIEW2_USER_DATA_FOLDER: profileDir,
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port} --remote-allow-origins=* --disable-gpu`
+    NSM_DEBUG_PORT: String(port)
   },
   stdio: ['ignore', appOutput, appOutput]
 });
@@ -271,7 +272,10 @@ try {
   await until('catalog cards', () => page.evaluate("document.querySelectorAll('.track-grid .group').length >= 6"), 40_000);
   await sleep(1500);
   await page.shot('06-catalog');
-  await page.evaluate("document.querySelector('.track-grid button[aria-label=\"Играть\"]').click()");
+  const clicked = await page.evaluate(
+    "(() => { const card = [...document.querySelectorAll('.track-grid .group')].find((item) => item.innerText.toLowerCase().includes('mp3')); const button = card && card.querySelector('button[aria-label=\"Играть\"]'); if (button) button.click(); return Boolean(button); })()"
+  );
+  check('an mp3 card is available in the catalog', clicked === true);
   const streamed = await until(
     'catalog audio playing',
     () => page.evaluate(`(() => { const a = document.querySelector('audio'); return a && !a.error && a.currentTime > 1 ? { t: a.currentTime, src: a.currentSrc.slice(0, 40), muted: a.muted } : null; })()`),
