@@ -136,7 +136,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: ${{ matrix.profile }}
-          disable-animations: true
+          disable-animations: false
           script: bash tools/ci/android-shoot.sh apk/NodeShiftMusic.apk screens
 
       - uses: actions/upload-artifact@v7
