@@ -206,7 +206,7 @@ fun LibraryScreen() {
                 }
             }
             item(span = full) {
-                Eyebrow(if (library.query.isEmpty()) "Библиотека" else "Результаты поиска", Modifier.reveal(4))
+                Eyebrow(if (library.query.isEmpty()) "Библиотека" else "Результаты поиска", Modifier.reveal(4), bottom = if (grid) 0f else 10f)
             }
             if (list.isEmpty()) {
                 item(span = full) { NText("Ничего не найдено.", Face.InterRegular, 14f, color = Palette.dim) }
@@ -355,7 +355,7 @@ fun PlaylistsScreen() {
             }
         }
         if (albums.isNotEmpty()) {
-            item(span = full) { Eyebrow("Альбомы", Modifier.padding(top = s(6))) }
+            item(span = full) { Eyebrow("Альбомы", Modifier.padding(top = s(6)), bottom = 0f) }
             items(albums, key = { "a-" + it.first }) { (name, tracks) ->
                 CollectionTile(
                     title = name,

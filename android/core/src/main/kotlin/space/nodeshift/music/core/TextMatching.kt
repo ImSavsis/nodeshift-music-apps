@@ -87,7 +87,7 @@ object TextMatching {
         RegexOption.IGNORE_CASE,
     )
     private val artistSplitPattern = Regex(
-        """(?iU)\s*(?:,|;|&|/|\bx\b|×|\band\b|\bи\b)\s*""",
+        """\s*(?:,|;|&|/|(?<![\p{L}\p{N}_])[xX](?![\p{L}\p{N}_])|×|(?<![\p{L}\p{N}_])[aA][nN][dD](?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])[иИ](?![\p{L}\p{N}_]))\s*""",
     )
 
     private fun collapse(text: String): String =

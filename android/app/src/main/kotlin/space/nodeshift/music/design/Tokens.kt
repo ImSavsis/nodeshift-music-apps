@@ -32,7 +32,7 @@ object Palette {
     val danger = Color(0xFFFF5555)
     val ok = Color(0xFF3FB950)
     val warn = Color(0xFFE3B341)
-    val playerBar = Color(0xFF0E0E0E).copy(alpha = 0.92f)
+    val playerBar = Color(0xFF0E0E0E).copy(alpha = 0.96f)
     val sheet = Color(0xFF121212).copy(alpha = 0.97f)
     val modal = Color(0xFF121212)
     val queue = Color(0xFF101010)
