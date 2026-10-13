@@ -125,7 +125,7 @@ fun BottomBar(tab: AppTab, moreActive: Boolean, onSelect: (AppTab) -> Unit, onMo
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Palette.bg.copy(alpha = 0.97f))
+            .background(Palette.bg)
             .drawBehind { drawLine(Palette.line2, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
             .navigationBarsPadding()
             .padding(horizontal = s(8))
