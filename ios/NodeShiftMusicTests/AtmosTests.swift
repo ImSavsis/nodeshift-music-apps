@@ -39,4 +39,10 @@ final class AtmosTests: XCTestCase {
         XCTAssertTrue(track.soundInfo(wantsLossless: true).isAtmos)
         XCTAssertTrue(track.usesSystemDecoder)
     }
+
+    @MainActor
+    func testLooseAlbumMatching() {
+        XCTAssertEqual(EnrichmentService.looseAlbum("Travelling Without Moving (Remastered)"), EnrichmentService.looseAlbum("Travelling Without Moving"))
+        XCTAssertEqual(EnrichmentService.looseAlbum("Dynamite [Deluxe]"), "dynamite")
+    }
 }

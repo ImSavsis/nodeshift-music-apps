@@ -78,16 +78,86 @@ final class EnrichmentService {
         UserDefaults.standard.set(checks, forKey: "nsm_cover_checked")
     }
 
+    private func siteChecked(_ key: String) -> Bool {
+        let checks = UserDefaults.standard.dictionary(forKey: "nsm_site_motion_checked") as? [String: Double] ?? [:]
+        guard let stamp = checks[key] else { return false }
+        return Date().timeIntervalSince1970 - stamp < 3 * 86_400
+    }
+
+    private func markSiteChecked(_ key: String) {
+        var checks = UserDefaults.standard.dictionary(forKey: "nsm_site_motion_checked") as? [String: Double] ?? [:]
+        checks[key] = Date().timeIntervalSince1970
+        UserDefaults.standard.set(checks, forKey: "nsm_site_motion_checked")
+    }
+
+    static func looseAlbum(_ text: String) -> String {
+        var value = text.lowercased()
+        for pattern in ["\\([^)]*\\)", "\\[[^\\]]*\\]"] {
+            value = value.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+        }
+        value = value.replacingOccurrences(of: "remastered", with: " ")
+        let kept = value.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
+        return String(kept).split(separator: " ").joined(separator: " ")
+    }
+
+    private func siteMotion(for track: TrackRecord, key: String) async -> Bool {
+        guard let album = track.album, !album.isEmpty else { return false }
+        let wanted = Self.looseAlbum(album)
+        let artist = track.albumArtist ?? track.artist
+        guard !wanted.isEmpty,
+              let found = try? await SiteAPI.shared.catalog(search: album, sort: "new", format: nil, limit: 60, offset: 0) else { return false }
+        let match = found.first { item in
+            guard item.motionFilename != nil, let siteAlbum = item.album else { return false }
+            return Self.looseAlbum(siteAlbum) == wanted && TextMatching.artistRatio(artist, item.artist) >= 0.8
+        }
+        guard let match, let file = match.motionFilename else { return false }
+        let local = "site-" + file
+        let target = AppPaths.motionURL(local)
+        if !FileManager.default.fileExists(atPath: target.path) {
+            guard (try? await Net.download(SiteAPI.shared.motionURL(file), to: target)) != nil else { return false }
+        }
+        var coverName: String?
+        if let cover = match.coverFilename {
+            let name = "site-" + cover
+            let coverTarget = AppPaths.coverURL(name)
+            if FileManager.default.fileExists(atPath: coverTarget.path) {
+                coverName = name
+            } else if (try? await Net.download(SiteAPI.shared.coverURL(cover), to: coverTarget)) != nil {
+                coverName = name
+            }
+        }
+        let siblings = ((try? database.allTracks()) ?? []).filter { $0.streamURL == nil && Self.looseAlbumKey($0) == Self.looseAlbumKey(track) }
+        for var sibling in siblings {
+            sibling.motionName = local
+            if sibling.coverName == nil {
+                sibling.coverName = coverName
+            }
+            try? database.save(sibling)
+        }
+        return true
+    }
+
+    private static func looseAlbumKey(_ track: TrackRecord) -> String {
+        TextMatching.artistKey(track.albumArtist ?? track.artist) + "|" + looseAlbum(track.album ?? "")
+    }
+
     @discardableResult
     private func findMotion(for track: TrackRecord, force: Bool) async -> Bool {
         guard Self.motionEnabled, let key = Self.albumKey(track), let album = track.album else { return false }
-        if track.motionName != nil || (!force && (albumsDone.contains(key) || checkedRecently(key, days: 30))) {
-            return false
-        }
-        if force && albumsDone.contains(key) {
+        if track.motionName != nil || albumsDone.contains(key) {
             return false
         }
         albumsDone.insert(key)
+        if force || !siteChecked(key) {
+            let hit = await siteMotion(for: track, key: key)
+            markSiteChecked(key)
+            if hit {
+                return true
+            }
+        }
+        if !force && checkedRecently(key, days: 30) {
+            return false
+        }
         let artist = track.albumArtist ?? track.artist
         let files = await MotionCoverFinder.find(
             artist: artist,
@@ -123,7 +193,7 @@ final class EnrichmentService {
         var albums: [String: TrackRecord] = [:]
         if Self.motionEnabled {
             for track in everything where track.motionName == nil {
-                if let key = Self.albumKey(track), albums[key] == nil, force || !checkedRecently(key, days: 30) {
+                if let key = Self.albumKey(track), albums[key] == nil, force || !siteChecked(key) || !checkedRecently(key, days: 30) {
                     albums[key] = track
                 }
             }

@@ -121,6 +121,7 @@ final class CatalogStore {
                 let known = Set(tracks.map { $0.id })
                 tracks.append(contentsOf: mapped.filter { !known.contains($0.id) })
             }
+            propagateAlbumMotion()
             offset = start + page.count
             hasMore = page.count == CatalogStore.pageSize
             isLoading = false
@@ -145,6 +146,21 @@ final class CatalogStore {
                 }
                 await self.fetchPage(reset: false)
                 try? await Task.sleep(nanoseconds: 120_000_000)
+            }
+        }
+    }
+
+    private func propagateAlbumMotion() {
+        var byAlbum: [String: String] = [:]
+        for track in tracks where track.isRemote {
+            if let motion = track.motionName, let key = EnrichmentService.albumKey(track) {
+                byAlbum[key] = motion
+            }
+        }
+        guard !byAlbum.isEmpty else { return }
+        for index in tracks.indices where tracks[index].isRemote && tracks[index].motionName == nil {
+            if let key = EnrichmentService.albumKey(tracks[index]), let motion = byAlbum[key] {
+                tracks[index].motionName = motion
             }
         }
     }

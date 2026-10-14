@@ -59,15 +59,14 @@ struct FullPlayerView: View {
         Palette.bg.ignoresSafeArea()
         if immersive, let track = player.current {
             ZStack {
-                TallCoverBackdrop(coverName: track.coverName)
-                MotionFullBleed(squareName: track.motionName, tallName: track.motion3x4Name)
+                ImmersiveCover(track: track)
                 LinearGradient(
                     stops: [
-                        .init(color: Color.black.opacity(0.5), location: 0),
-                        .init(color: Color.black.opacity(0), location: 0.22),
-                        .init(color: Color.black.opacity(0), location: 0.42),
-                        .init(color: Color.black.opacity(0.78), location: 0.74),
-                        .init(color: Color.black.opacity(0.92), location: 1),
+                        .init(color: Color.black.opacity(0.45), location: 0),
+                        .init(color: Color.black.opacity(0), location: 0.18),
+                        .init(color: Color.black.opacity(0), location: 0.4),
+                        .init(color: Color.black.opacity(0.7), location: 0.62),
+                        .init(color: Color.black.opacity(0.9), location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom

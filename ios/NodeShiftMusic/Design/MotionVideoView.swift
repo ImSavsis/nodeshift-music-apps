@@ -156,7 +156,56 @@ struct MotionFullBleed: View {
     }
 }
 
-struct TallCoverBackdrop: View {
+struct MotionSquareFill: View {
+    let motionName: String
+    @State private var ready = false
+    @State private var url: URL?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if let url, !reduceMotion, SoundSettings.shared.motionCovers {
+                MotionVideoView(url: url) {
+                    ready = true
+                }
+                .id(url)
+                .opacity(ready ? 1 : 0)
+                .animation(.easeInOut(duration: 0.8), value: ready)
+            }
+        }
+        .allowsHitTesting(false)
+        .task(id: motionName) {
+            ready = false
+            url = await MotionStore.shared.squareURL(motionName)
+        }
+    }
+}
+
+struct SharpCover: View {
+    let coverName: String?
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Palette.surface
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            }
+        }
+        .clipped()
+        .task(id: coverName) {
+            guard let coverName else {
+                image = nil
+                return
+            }
+            image = await CoverImageLoader.shared.image(url: CoverSource.url(for: coverName, maxPixel: 1000), maxPixel: 1000)
+        }
+    }
+}
+
+struct BlurredCover: View {
     let coverName: String?
     @State private var image: UIImage?
 
@@ -167,8 +216,11 @@ struct TallCoverBackdrop: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .blur(radius: 46)
+                    .scaleEffect(1.3)
                     .transition(.opacity)
             }
+            Color.black.opacity(0.35)
         }
         .clipped()
         .animation(.easeInOut(duration: 0.5), value: image == nil)
@@ -177,13 +229,52 @@ struct TallCoverBackdrop: View {
                 image = nil
                 return
             }
-            let url = CoverSource.url(for: coverName, maxPixel: 1000)
-            let base = await CoverImageLoader.shared.image(url: url, maxPixel: 1000)
-            guard let base else { return }
-            let tall = await Task.detached(priority: .userInitiated) {
-                TallMotionBuilder.tallPreview(from: base)
-            }.value
-            image = tall
+            image = await CoverImageLoader.shared.image(url: CoverSource.url(for: coverName, maxPixel: 300), maxPixel: 300)
         }
+    }
+}
+
+struct ImmersiveCover: View {
+    let track: TrackRecord
+
+    private var hasLocalTall: Bool {
+        guard let name = track.motion3x4Name else { return false }
+        return FileManager.default.fileExists(atPath: AppPaths.motionURL(name).path)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                BlurredCover(coverName: track.coverName)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                if hasLocalTall {
+                    ZStack {
+                        SharpCover(coverName: track.coverName)
+                        MotionFullBleed(squareName: nil, tallName: track.motion3x4Name)
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                } else {
+                    ZStack {
+                        SharpCover(coverName: track.coverName)
+                        if let motion = track.motionName {
+                            MotionSquareFill(motionName: motion)
+                        }
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.width)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.82),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+            }
+        }
+        .ignoresSafeArea()
     }
 }

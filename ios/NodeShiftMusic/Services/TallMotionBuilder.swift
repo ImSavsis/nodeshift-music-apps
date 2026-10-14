@@ -21,44 +21,13 @@ enum TallMotionBuilder {
             return CIImage(color: CIColor(red: 0.04, green: 0.04, blue: 0.04)).cropped(to: rect)
         }
         let origin = source.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
-
-        let fitScale = canvas.width / extent.width
-        let fitHeight = extent.height * fitScale
-        let foreground = origin
-            .transformed(by: CGAffineTransform(scaleX: fitScale, y: fitScale))
-            .transformed(by: CGAffineTransform(translationX: 0, y: canvas.height - fitHeight))
-        if fitHeight >= canvas.height {
-            return foreground.cropped(to: rect)
-        }
-
-        let quarter = CGSize(width: canvas.width / 4, height: canvas.height / 4)
-        let fillScale = max(quarter.width / extent.width, quarter.height / extent.height)
-        let fillWidth = extent.width * fillScale
-        let fillHeight = extent.height * fillScale
-        let smallRect = CGRect(origin: .zero, size: quarter)
-        let backdrop = origin
-            .transformed(by: CGAffineTransform(scaleX: fillScale, y: fillScale))
-            .transformed(by: CGAffineTransform(translationX: (quarter.width - fillWidth) / 2, y: (quarter.height - fillHeight) / 2))
-            .clampedToExtent()
-            .applyingGaussianBlur(sigma: 7)
-            .cropped(to: smallRect)
-            .transformed(by: CGAffineTransform(scaleX: 4, y: 4))
-        let shade = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0.3)).cropped(to: rect)
-        let base = shade.composited(over: backdrop).cropped(to: rect)
-
-        let fade = min(canvas.height * 0.1, fitHeight * 0.4)
-        let gradient = CIFilter.linearGradient()
-        gradient.point0 = CGPoint(x: 0, y: canvas.height - fitHeight + fade)
-        gradient.point1 = CGPoint(x: 0, y: canvas.height - fitHeight)
-        gradient.color0 = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
-        gradient.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 1)
-        let mask = (gradient.outputImage ?? CIImage(color: CIColor.white)).cropped(to: rect)
-
-        let blend = CIFilter.blendWithMask()
-        blend.inputImage = foreground
-        blend.backgroundImage = base
-        blend.maskImage = mask
-        return (blend.outputImage ?? foreground.composited(over: base)).cropped(to: rect)
+        let scale = max(canvas.width / extent.width, canvas.height / extent.height)
+        let width = extent.width * scale
+        let height = extent.height * scale
+        return origin
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(translationX: (canvas.width - width) / 2, y: (canvas.height - height) / 2))
+            .cropped(to: rect)
     }
 
     static func tallPreview(from image: UIImage) -> UIImage? {
