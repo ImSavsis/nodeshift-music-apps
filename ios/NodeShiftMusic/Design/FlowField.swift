@@ -114,10 +114,9 @@ struct FlowFieldView: View {
     @Environment(\.s) private var s
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var simulation = FlowSimulation()
-    @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     var body: some View {
-        let animate = !reduceMotion && !lowPower
+        let animate = !reduceMotion && SoundSettings.shared.ambientMotion
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !animate)) { context in
             Canvas { graphics, size in
                 simulation.rebuild(size: size, scale: s.factor)
@@ -129,8 +128,5 @@ struct FlowFieldView: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
-            lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-        }
     }
 }

@@ -94,7 +94,9 @@ enum ImportScanner {
     static let trackerFormats: Set<String> = ["mod", "s3m", "xm", "it"]
 
     static var audioExtensions: Set<String> {
-        Set(AudioFile.supportedPathExtensions.map { $0.lowercased() }).subtracting(trackerFormats)
+        Set(AudioFile.supportedPathExtensions.map { $0.lowercased() })
+            .subtracting(trackerFormats)
+            .union(AudioFormats.systemDecodedExtensions)
     }
 
     static func scan(_ roots: [URL], scratch: URL) -> (candidates: [ImportCandidate], skipped: Int) {

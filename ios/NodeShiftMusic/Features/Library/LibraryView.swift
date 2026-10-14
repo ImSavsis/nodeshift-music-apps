@@ -17,10 +17,10 @@ struct LibraryView: View {
         if let chosenMode {
             return chosenMode
         }
-        if let stored = UserDefaults.standard.string(forKey: "nsm_library_mode"), let value = LibraryMode(rawValue: stored) {
+        if let stored = UserDefaults.standard.string(forKey: "nsm_library_mode_v2"), let value = LibraryMode(rawValue: stored) {
             return value
         }
-        return library.loaded && library.tracks.isEmpty ? .catalog : .mine
+        return .catalog
     }
 
     var body: some View {
@@ -28,7 +28,7 @@ struct LibraryView: View {
             UpdateBanner()
             PageHeader(
                 title: "Треки",
-                subtitle: mode == .catalog ? "Все треки NodeShift, играют онлайн" : "Вся твоя музыка у тебя на телефоне"
+                subtitle: mode == .catalog ? "Все треки NodeShift: играют онлайн, обложки и анимации с сайта" : "Только то, что лежит на телефоне"
             )
             .reveal(0)
             modeSwitch
@@ -44,18 +44,18 @@ struct LibraryView: View {
 
     private var modeSwitch: some View {
         HStack(spacing: s(8)) {
-            Chip(title: "Моя музыка", active: mode == .mine) {
-                choose(.mine)
-            }
-            Chip(title: "Весь каталог", active: mode == .catalog, icon: .cloud) {
+            Chip(title: "Все треки", active: mode == .catalog, icon: .cloud) {
                 choose(.catalog)
+            }
+            Chip(title: "На телефоне", active: mode == .mine, icon: .smartphone) {
+                choose(.mine)
             }
         }
         .padding(.bottom, s(18))
     }
 
     private func choose(_ value: LibraryMode) {
-        UserDefaults.standard.set(value.rawValue, forKey: "nsm_library_mode")
+        UserDefaults.standard.set(value.rawValue, forKey: "nsm_library_mode_v2")
         withAnimation(Motion.expoOut(0.3)) {
             chosenMode = value
         }

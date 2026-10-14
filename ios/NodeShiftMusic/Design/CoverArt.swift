@@ -121,10 +121,9 @@ struct CoverArt: View {
     @Environment(\.s) private var s
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var image: UIImage?
-    @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     private var drifting: Bool {
-        live && !reduceMotion && !lowPower && image != nil
+        live && !reduceMotion && SoundSettings.shared.ambientMotion && image != nil
     }
 
     var body: some View {
@@ -138,7 +137,7 @@ struct CoverArt: View {
                         } else {
                             fallback
                         }
-                        if let motionName, FileManager.default.fileExists(atPath: AppPaths.motionURL(motionName).path) {
+                        if let motionName, MotionStore.hasLocalFile(motionName) {
                             MotionOverlay(motionName: motionName)
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                         }

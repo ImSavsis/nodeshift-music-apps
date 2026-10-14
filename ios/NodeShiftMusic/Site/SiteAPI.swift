@@ -115,6 +115,8 @@ struct SitePlaylist: Decodable, Identifiable, Hashable, Sendable {
     let name: String
     let coverFilename: String?
     let trackCount: Int?
+    let previewCover: String?
+    let previewMotion: String?
 }
 
 struct SitePlaylistDetail: Decodable, Sendable {
@@ -131,6 +133,28 @@ struct SitePlaylistDetail: Decodable, Sendable {
 
 struct SiteLibraryState: Decodable, Sendable {
     let favoriteIds: [FlexibleID]
+    let wishlistIds: [FlexibleID]?
+}
+
+struct SiteLibrary: Sendable {
+    let favorites: Set<String>
+    let wishlist: Set<String>
+}
+
+struct SiteRoomInfo: Decodable, Sendable {
+    struct Playing: Decodable, Sendable {
+        let title: String
+        let artist: String
+    }
+
+    let code: String
+    let members: Int
+    let playing: Bool
+    let track: Playing?
+}
+
+struct SiteRoomCreated: Decodable, Sendable {
+    let code: String
 }
 
 struct SiteLyrics: Decodable, Sendable {
@@ -246,7 +270,15 @@ final class SiteAPI: @unchecked Sendable {
         return token
     }
 
-    private func authorizedData(_ path: String, method: String = "GET") async throws -> Data {
+    func freshAccessToken() async -> String? {
+        guard hasSession else { return nil }
+        if let refreshed = try? await refreshAccess() {
+            return refreshed
+        }
+        return tokens().access
+    }
+
+    private func authorizedData(_ path: String, method: String = "GET", body: [String: Any]? = nil) async throws -> Data {
         var token = tokens().access
         if token == nil {
             token = try await refreshAccess()
@@ -255,6 +287,10 @@ final class SiteAPI: @unchecked Sendable {
             var request = Net.request(url(path))
             request.httpMethod = method
             request.setValue("Bearer \(token ?? "")", forHTTPHeaderField: "Authorization")
+            if let body {
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            }
             let (data, response) = try await Net.session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw SiteError.server(0) }
             if http.statusCode == 401, attempt == 0 {
@@ -312,13 +348,81 @@ final class SiteAPI: @unchecked Sendable {
         _ = try? await Net.session.data(for: request)
     }
 
-    func likedIDs() async throws -> Set<String> {
+    func libraryState() async throws -> SiteLibrary {
         let state = try decoder().decode(SiteLibraryState.self, from: try await authorizedData("/api/music/me/library"))
-        return Set(state.favoriteIds.map { $0.value })
+        return SiteLibrary(
+            favorites: Set(state.favoriteIds.map { $0.value }),
+            wishlist: Set((state.wishlistIds ?? []).map { $0.value })
+        )
+    }
+
+    func likedIDs() async throws -> Set<String> {
+        try await libraryState().favorites
     }
 
     func setLiked(_ trackID: String, value: Bool) async throws {
         _ = try await authorizedData("/api/music/favorites/\(trackID)", method: value ? "POST" : "DELETE")
+    }
+
+    func wishlist() async throws -> [SiteTrack] {
+        try decoder().decode([SiteTrack].self, from: try await authorizedData("/api/music/wishlist"))
+    }
+
+    func setWishlisted(_ trackID: String, value: Bool) async throws {
+        _ = try await authorizedData("/api/music/wishlist/\(trackID)", method: value ? "POST" : "DELETE")
+    }
+
+    func createPlaylist(name: String) async throws -> SitePlaylist {
+        let data = try await authorizedData("/api/music/playlists", method: "POST", body: ["name": name])
+        return try decoder().decode(SitePlaylist.self, from: data)
+    }
+
+    func renamePlaylist(_ id: String, name: String) async throws {
+        _ = try await authorizedData("/api/music/playlists/\(id)", method: "PATCH", body: ["name": name])
+    }
+
+    func deletePlaylist(_ id: String) async throws {
+        _ = try await authorizedData("/api/music/playlists/\(id)", method: "DELETE")
+    }
+
+    func addToPlaylist(_ id: String, trackID: String) async throws {
+        guard let numeric = Int(trackID) else { throw SiteError.badCallback }
+        _ = try await authorizedData("/api/music/playlists/\(id)/tracks", method: "POST", body: ["track_id": numeric])
+    }
+
+    func removeFromPlaylist(_ id: String, trackID: String) async throws {
+        _ = try await authorizedData("/api/music/playlists/\(id)/tracks/\(trackID)", method: "DELETE")
+    }
+
+    func createRoom() async throws -> String {
+        let data = try await authorizedData("/api/music/rooms", method: "POST")
+        return try decoder().decode(SiteRoomCreated.self, from: data).code
+    }
+
+    func roomInfo(_ code: String) async throws -> SiteRoomInfo? {
+        let encoded = code.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? code
+        do {
+            let data = try await Net.data(url("/api/music/rooms/\(encoded)"))
+            return try decoder().decode(SiteRoomInfo.self, from: data)
+        } catch NetError.notFound {
+            return nil
+        }
+    }
+
+    func roomSocketURL(_ code: String) -> URL? {
+        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+        components?.scheme = "wss"
+        let encoded = code.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? code
+        components?.path = "/api/music/rooms/\(encoded)/ws"
+        return components?.url
+    }
+
+    func roomLink(_ code: String) -> URL {
+        base.appendingPathComponent("room").appendingPathComponent(code)
+    }
+
+    var bumpBase: URL {
+        base.appendingPathComponent("app").appendingPathComponent("bump")
     }
 
     func lyrics(_ trackID: String) async -> SiteLyrics? {

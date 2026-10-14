@@ -11,36 +11,39 @@ struct FullPlayerView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(CatalogStore.self) private var catalog
     @Environment(LyricsStore.self) private var lyrics
+    @Environment(\.openOverlay) private var openOverlay
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.s) private var s
     @State private var tab: PlayerTab = .player
     @State private var drag: CGFloat = 0
     @State private var palette: [RGB8] = PaletteExtractor.fallback
+    @State private var showSound = false
 
     init() {
         _tab = State(initialValue: ProcessInfo.processInfo.arguments.contains("-nsm-lyrics") ? .lyrics : .player)
     }
 
+    private var immersive: Bool {
+        guard tab == .player, let track = player.current, !reduceMotion else { return false }
+        return SoundSettings.shared.motionCovers && MotionStore.hasAny(track)
+    }
+
     var body: some View {
         ZStack {
-            Palette.bg.ignoresSafeArea()
-            AmbientBackdrop(palette: palette, playing: player.isPlaying)
-                .ignoresSafeArea()
+            backdrop
             VStack(spacing: 0) {
                 header
                 tabs
-                GeometryReader { proxy in
-                    Group {
-                        if tab == .player {
-                            playerPane(size: proxy.size)
-                                .transition(.opacity)
-                        } else if let track = player.current {
-                            LyricsPane(state: lyrics.state(for: track))
-                                .padding(.horizontal, s(20))
-                                .transition(.opacity)
-                        }
+                content
+            }
+            if showSound {
+                SoundSheet(track: player.current) {
+                    withAnimation(Motion.expoOut(0.3)) {
+                        showSound = false
                     }
-                    .animation(Motion.opacity, value: tab)
                 }
+                .transition(.move(edge: .bottom))
+                .zIndex(5)
             }
         }
         .offset(y: drag)
@@ -48,6 +51,51 @@ struct FullPlayerView: View {
             guard let track = player.current else { return }
             palette = await PaletteProvider.shared.palette(coverName: track.coverName)
             await lyrics.ensure(track)
+        }
+    }
+
+    @ViewBuilder
+    private var backdrop: some View {
+        Palette.bg.ignoresSafeArea()
+        if immersive, let track = player.current {
+            ZStack {
+                TallCoverBackdrop(coverName: track.coverName)
+                MotionFullBleed(squareName: track.motionName, tallName: track.motion3x4Name)
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.black.opacity(0.5), location: 0),
+                        .init(color: Color.black.opacity(0), location: 0.22),
+                        .init(color: Color.black.opacity(0), location: 0.42),
+                        .init(color: Color.black.opacity(0.78), location: 0.74),
+                        .init(color: Color.black.opacity(0.92), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .ignoresSafeArea()
+            .transition(.opacity)
+        } else {
+            AmbientBackdrop(palette: palette, playing: player.isPlaying)
+                .ignoresSafeArea()
+        }
+    }
+
+    private var content: some View {
+        GeometryReader { proxy in
+            Group {
+                if tab == .player {
+                    if immersive {
+                        immersivePane
+                    } else {
+                        playerPane(size: proxy.size)
+                    }
+                } else if let track = player.current {
+                    lyricsPane(track)
+                }
+            }
+            .transition(.opacity)
+            .animation(Motion.opacity, value: tab)
         }
     }
 
@@ -148,7 +196,7 @@ struct FullPlayerView: View {
 
     private func playerPane(size: CGSize) -> some View {
         let track = player.current
-        let side = min(size.width * 0.84, size.height * 0.46)
+        let side = max(s(140), min(size.width * 0.84, size.height - s(310)))
         return VStack(spacing: s(22)) {
             Spacer(minLength: 0)
             CoverArt(coverName: track?.coverName, motionName: track?.motionName, radius: Radius.card, maxPixel: 1000)
@@ -156,8 +204,9 @@ struct FullPlayerView: View {
                 .scaleEffect(player.isPlaying ? 1 : 0.92)
                 .animation(Motion.coverSpring, value: player.isPlaying)
                 .shadow(color: .black.opacity(0.55), radius: s(40), y: s(30))
-            VStack(spacing: s(18)) {
+            VStack(spacing: s(16)) {
                 titleRow(track)
+                soundRow(track)
                 progressRow
                 transport
                 actions(track)
@@ -166,6 +215,47 @@ struct FullPlayerView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var immersivePane: some View {
+        let track = player.current
+        return VStack(spacing: s(16)) {
+            Spacer(minLength: 0)
+            titleRow(track)
+            soundRow(track)
+            progressRow
+            transport
+            actions(track)
+        }
+        .padding(.horizontal, s(20))
+        .padding(.bottom, s(10))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func lyricsPane(_ track: TrackRecord) -> some View {
+        VStack(spacing: s(10)) {
+            LyricsPane(state: lyrics.state(for: track))
+                .padding(.horizontal, s(20))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            VStack(spacing: s(8)) {
+                progressRow
+                compactTransport
+            }
+            .padding(.horizontal, s(20))
+            .padding(.bottom, s(8))
+        }
+    }
+
+    @ViewBuilder
+    private func soundRow(_ track: TrackRecord?) -> some View {
+        if let track {
+            SoundChip(track: track) {
+                withAnimation(Motion.expoOut(0.32)) {
+                    showSound = true
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func titleRow(_ track: TrackRecord?) -> some View {
@@ -180,7 +270,7 @@ struct FullPlayerView: View {
                 HStack(spacing: s(8)) {
                     Text(track?.artist ?? "")
                         .font(.nsm(.monoRegular, s(12)))
-                        .foregroundStyle(Palette.dim)
+                        .foregroundStyle(Palette.muted)
                         .lineLimit(1)
                     if let format = track?.format {
                         FormatBadge(format: format)
@@ -199,14 +289,14 @@ struct FullPlayerView: View {
             HStack(spacing: s(12)) {
                 Text(formatClock(time))
                     .font(.nsm(.monoRegular, s(11)))
-                    .foregroundStyle(Palette.dim)
+                    .foregroundStyle(Palette.muted)
                     .frame(width: s(40), alignment: .trailing)
                 SeekBar(value: time, total: player.duration) { target in
                     player.seek(to: target)
                 }
                 Text(formatClock(player.duration))
                     .font(.nsm(.monoRegular, s(11)))
-                    .foregroundStyle(Palette.dim)
+                    .foregroundStyle(Palette.muted)
                     .frame(width: s(40), alignment: .leading)
             }
         }
@@ -239,6 +329,27 @@ struct FullPlayerView: View {
         }
     }
 
+    private var compactTransport: some View {
+        HStack {
+            Spacer()
+            IconToggle(icon: .skipBack, active: true, size: 48, iconSize: 24, filled: true) {
+                player.previous()
+            }
+            Spacer()
+            Button {
+                player.togglePlay()
+            } label: {
+                PlayCircle(size: 56, playing: player.isPlaying, iconSize: 24)
+            }
+            .buttonStyle(PressStyle(pressedOpacity: 0.95))
+            Spacer()
+            IconToggle(icon: .skipForward, active: true, size: 48, iconSize: 24, filled: true) {
+                player.next()
+            }
+            Spacer()
+        }
+    }
+
     private func actions(_ track: TrackRecord?) -> some View {
         HStack(spacing: s(28)) {
             if let track {
@@ -251,7 +362,10 @@ struct FullPlayerView: View {
                     }
                 }
                 IconToggle(icon: .listPlus, size: 40, iconSize: 19) {
-                    library.menuTrack = track
+                    library.playlistTrack = track
+                }
+                IconToggle(icon: .users, size: 40, iconSize: 19) {
+                    openOverlay(.together)
                 }
                 IconToggle(icon: .ellipsis, size: 40, iconSize: 19) {
                     library.menuTrack = track

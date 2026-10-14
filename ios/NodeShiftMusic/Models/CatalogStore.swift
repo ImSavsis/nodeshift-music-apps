@@ -10,9 +10,11 @@ extension SiteTrack {
         record.durationMs = Int((durationSeconds ?? 0) * 1000)
         record.format = (format ?? "mp3").lowercased()
         record.coverName = coverFilename.map { CoverSource.remoteName($0) }
+        record.motionName = motionFilename.map { CoverSource.remoteName($0) }
         record.siteId = id.value
         record.playCount = playCount ?? 0
         record.streamURL = api.audioURL(self, lossless: false)
+        record.losslessURL = api.audioURL(self, lossless: true)
         return record
     }
 }
@@ -20,7 +22,8 @@ extension SiteTrack {
 @MainActor
 @Observable
 final class CatalogStore {
-    static let pageSize = 30
+    static let pageSize = 60
+    static let prefetchLimit = 1500
 
     var tracks: [TrackRecord] = []
     var query = ""
@@ -30,10 +33,12 @@ final class CatalogStore {
     private(set) var hasMore = true
     private(set) var failed = false
     private(set) var likedIDs: Set<String> = []
+    private(set) var wishlistIDs: Set<String> = []
 
     @ObservationIgnored private var offset = 0
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var prefetchTask: Task<Void, Never>?
     @ObservationIgnored private weak var library: LibraryStore?
     @ObservationIgnored private weak var site: SiteSession?
     @ObservationIgnored private weak var toasts: ToastCenter?
@@ -71,22 +76,27 @@ final class CatalogStore {
         generation += 1
         offset = 0
         hasMore = true
-        load(reset: true)
+        prefetchTask?.cancel()
+        Task { [weak self] in
+            await self?.fetchPage(reset: true)
+        }
     }
 
     func loadMore() {
         guard hasMore, !isLoading else { return }
-        load(reset: false)
+        Task { [weak self] in
+            await self?.fetchPage(reset: false)
+        }
     }
 
-    private func record(for item: SiteTrack) -> TrackRecord {
+    func record(for item: SiteTrack) -> TrackRecord {
         if let local = library?.tracks.first(where: { $0.siteId == item.id.value }) {
             return local
         }
         return item.catalogRecord()
     }
 
-    private func load(reset: Bool) {
+    private func fetchPage(reset: Bool) async {
         let token = generation
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let sortKey = apiSort
@@ -94,32 +104,47 @@ final class CatalogStore {
         let start = offset
         isLoading = true
         failed = false
-        Task { [weak self] in
-            do {
-                let page = try await SiteAPI.shared.catalog(
-                    search: needle,
-                    sort: sortKey,
-                    format: format,
-                    limit: CatalogStore.pageSize,
-                    offset: start
-                )
-                guard let self, token == self.generation else { return }
-                let playable = page.filter { $0.mediaKind != "video" }
-                let mapped = playable.map { self.record(for: $0) }
-                if reset {
-                    self.tracks = mapped
-                } else {
-                    let known = Set(self.tracks.map { $0.id })
-                    self.tracks.append(contentsOf: mapped.filter { !known.contains($0.id) })
+        do {
+            let page = try await SiteAPI.shared.catalog(
+                search: needle,
+                sort: sortKey,
+                format: format,
+                limit: CatalogStore.pageSize,
+                offset: start
+            )
+            guard token == generation else { return }
+            let playable = page.filter { $0.mediaKind != "video" }
+            let mapped = playable.map { record(for: $0) }
+            if reset {
+                tracks = mapped
+            } else {
+                let known = Set(tracks.map { $0.id })
+                tracks.append(contentsOf: mapped.filter { !known.contains($0.id) })
+            }
+            offset = start + page.count
+            hasMore = page.count == CatalogStore.pageSize
+            isLoading = false
+            if reset {
+                startPrefetch(token)
+            }
+        } catch {
+            guard token == generation else { return }
+            failed = tracks.isEmpty
+            hasMore = false
+            isLoading = false
+        }
+    }
+
+    private func startPrefetch(_ token: Int) {
+        prefetchTask?.cancel()
+        prefetchTask = Task { [weak self] in
+            while let self, !Task.isCancelled, token == self.generation, self.hasMore, self.tracks.count < CatalogStore.prefetchLimit {
+                if self.isLoading {
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    continue
                 }
-                self.offset = start + page.count
-                self.hasMore = page.count == CatalogStore.pageSize
-                self.isLoading = false
-            } catch {
-                guard let self, token == self.generation else { return }
-                self.failed = true
-                self.hasMore = false
-                self.isLoading = false
+                await self.fetchPage(reset: false)
+                try? await Task.sleep(nanoseconds: 120_000_000)
             }
         }
     }
@@ -135,15 +160,18 @@ final class CatalogStore {
     func refreshLikes() async {
         guard site?.isLoggedIn == true else {
             likedIDs = []
+            wishlistIDs = []
             return
         }
-        if let ids = try? await SiteAPI.shared.likedIDs() {
-            likedIDs = ids
+        if let state = try? await SiteAPI.shared.libraryState() {
+            likedIDs = state.favorites
+            wishlistIDs = state.wishlist
         }
     }
 
     func clearLikes() {
         likedIDs = []
+        wishlistIDs = []
     }
 
     func isFavorite(_ track: TrackRecord) -> Bool {
@@ -151,6 +179,11 @@ final class CatalogStore {
             return likedIDs.contains(siteID)
         }
         return track.isFavorite
+    }
+
+    func isWishlisted(_ track: TrackRecord) -> Bool {
+        guard let siteID = track.siteId else { return false }
+        return wishlistIDs.contains(siteID)
     }
 
     func toggleFavorite(_ track: TrackRecord, library: LibraryStore) {
@@ -179,6 +212,37 @@ final class CatalogStore {
                     self.likedIDs.insert(siteID)
                 }
                 self.toasts?.show("Не получилось сохранить лайк")
+            }
+        }
+    }
+
+    func toggleWishlist(_ track: TrackRecord) {
+        guard let siteID = track.siteId else {
+            toasts?.show("Этого трека нет на сайте")
+            return
+        }
+        guard site?.isLoggedIn == true else {
+            toasts?.show("Войди через сайт, чтобы пользоваться вишлистом")
+            return
+        }
+        let value = !wishlistIDs.contains(siteID)
+        if value {
+            wishlistIDs.insert(siteID)
+        } else {
+            wishlistIDs.remove(siteID)
+        }
+        toasts?.show(value ? "Добавлено в вишлист" : "Убрано из вишлиста")
+        Task { [weak self] in
+            do {
+                try await SiteAPI.shared.setWishlisted(siteID, value: value)
+            } catch {
+                guard let self else { return }
+                if value {
+                    self.wishlistIDs.remove(siteID)
+                } else {
+                    self.wishlistIDs.insert(siteID)
+                }
+                self.toasts?.show("Не получилось сохранить вишлист")
             }
         }
     }

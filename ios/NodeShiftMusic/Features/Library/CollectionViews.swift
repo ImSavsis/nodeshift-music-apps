@@ -78,7 +78,10 @@ struct PlaylistsView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.openStorage) private var openStorage
+    @Environment(\.openOverlay) private var openOverlay
     @Environment(\.s) private var s
+    @State private var creating = false
+    @State private var newName = ""
 
     private var albums: [(name: String, tracks: [TrackRecord])] {
         Dictionary(grouping: library.tracks.filter { $0.album != nil }, by: { $0.album ?? "" })
@@ -114,7 +117,8 @@ struct PlaylistsView: View {
             .reveal(1)
             LazyVGrid(columns: columns, spacing: s(24)) {
                 Button {
-                    toasts.show("Плейлисты скоро будут")
+                    newName = ""
+                    creating = true
                 } label: {
                     Color.clear
                         .aspectRatio(1, contentMode: .fit)
@@ -135,10 +139,7 @@ struct PlaylistsView: View {
                 ForEach(Array(lists.enumerated()), id: \.element.id) { index, playlist in
                     let tracks = library.tracks(in: playlist)
                     Button {
-                        if let first = tracks.first {
-                            player.shuffle = false
-                            player.play(first, in: tracks)
-                        }
+                        openOverlay(.playlist(playlist.id))
                     } label: {
                         VStack(alignment: .leading, spacing: s(12)) {
                             CoverArt(coverName: playlist.coverName ?? tracks.first(where: { $0.coverName != nil })?.coverName)
@@ -186,6 +187,15 @@ struct PlaylistsView: View {
                     }
                 }
             }
+        }
+        .alert("Новый плейлист", isPresented: $creating) {
+            TextField("Название", text: $newName)
+            Button("Создать") {
+                if let created = library.createPlaylist(name: newName) {
+                    toasts.show("Плейлист «\(created.name)» создан")
+                }
+            }
+            Button("Отмена", role: .cancel) {}
         }
     }
 }

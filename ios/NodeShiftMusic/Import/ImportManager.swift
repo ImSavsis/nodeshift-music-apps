@@ -75,6 +75,8 @@ final class ImportManager {
     @ObservationIgnored var onTrackAdded: ((TrackRecord) -> Void)?
     @ObservationIgnored var onTrackRemoved: ((String) -> Void)?
 
+    private static let dolbyCandidates: Set<String> = ["m4a", "mp4", "ec3", "eac3", "ac3", "caf"]
+
     init(
         database: AppDatabase,
         tracksDir: URL = AppPaths.tracksDir,
@@ -237,7 +239,15 @@ final class ImportManager {
         }
 
         update(id) { $0.state = .working("Читаем теги") }
-        guard let tags = await Task.detached(priority: .userInitiated, operation: { TagIO.read(destination) }).value else {
+        var dolby: AudioInspection?
+        if Self.dolbyCandidates.contains(ext) {
+            let found = await AudioInspector.inspect(destination)
+            if found?.isDolby == true {
+                dolby = found
+            }
+        }
+        let readTags = await Task.detached(priority: .userInitiated, operation: { TagIO.read(destination) }).value
+        guard let tags = readTags ?? dolby?.readTags else {
             try? FileManager.default.removeItem(at: destination)
             update(id) { $0.state = .failed("Формат не читается") }
             summary.failed += 1
@@ -309,9 +319,11 @@ final class ImportManager {
             isrc: isrc,
             cover: jpeg
         )
-        _ = try? await Task.detached(priority: .userInitiated) {
-            try TagIO.write(destination, tags: writeTags)
-        }.value
+        if dolby == nil {
+            _ = try? await Task.detached(priority: .userInitiated) {
+                try TagIO.write(destination, tags: writeTags)
+            }.value
+        }
 
         if let jpeg, let coverName {
             try? jpeg.write(to: coversDir.appendingPathComponent(coverName))
@@ -332,7 +344,7 @@ final class ImportManager {
         track.year = year
         track.genre = genre
         track.durationMs = Int((duration * 1000).rounded())
-        track.format = ext
+        track.format = dolby?.formatName ?? ext
         track.bitrateKbps = tags.bitrateKbps
         track.sampleRate = tags.sampleRate
         track.bitDepth = tags.bitDepth

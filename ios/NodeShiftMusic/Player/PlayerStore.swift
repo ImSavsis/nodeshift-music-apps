@@ -48,6 +48,15 @@ final class PlayerStore {
     @ObservationIgnored private var ticker: Timer?
     @ObservationIgnored private var history: [Int] = []
     @ObservationIgnored var onTrackStarted: ((TrackRecord) -> Void)?
+    @ObservationIgnored var endedHandler: (() -> Bool)?
+
+    var engineTime: Double {
+        engine?.currentTime ?? position
+    }
+
+    var engineDuration: Double {
+        engine?.totalTime ?? 0
+    }
 
     var current: TrackRecord? {
         guard let index = currentIndex, queue.indices.contains(index) else { return nil }
@@ -232,7 +241,7 @@ final class PlayerStore {
         duration = track.durationSeconds
         position = 0
         syncDate = Date()
-        let wanted = track.isRemote ? remoteEngine : localEngine
+        let wanted = (track.isRemote || track.usesSystemDecoder) ? remoteEngine : localEngine
         if let active = engine, let wanted, active !== wanted {
             active.stop()
         }
@@ -251,6 +260,9 @@ final class PlayerStore {
     }
 
     private func handleEnded() {
+        if let handler = endedHandler, handler() {
+            return
+        }
         next()
     }
 

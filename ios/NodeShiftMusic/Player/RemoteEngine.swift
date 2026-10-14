@@ -50,14 +50,32 @@ final class RemoteEngine: NSObject, PlaybackEngine {
         statusObservation = nil
     }
 
+    private func source(for track: TrackRecord, compact: Bool) -> URL? {
+        if !track.isRemote {
+            return track.fileURL
+        }
+        if compact {
+            return track.streamURL ?? track.losslessURL
+        }
+        if SoundSettings.shared.wantsLossless(), let original = track.losslessURL {
+            return original
+        }
+        return track.streamURL ?? track.losslessURL
+    }
+
     func load(_ track: TrackRecord, autoplay: Bool) {
-        guard let url = track.streamURL else {
+        open(track, autoplay: autoplay, compact: false)
+    }
+
+    private func open(_ track: TrackRecord, autoplay: Bool, compact: Bool) {
+        guard let url = source(for: track, compact: compact) else {
             onError?("у трека нет адреса потока")
             return
         }
         activateSession()
         detach()
         let item = AVPlayerItem(url: url)
+        item.allowedAudioSpatializationFormats = SoundSettings.shared.atmosMode == .off ? [] : .monoStereoAndMultichannel
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: item,
@@ -71,7 +89,12 @@ final class RemoteEngine: NSObject, PlaybackEngine {
             guard observed.status == .failed else { return }
             let message = observed.error?.localizedDescription ?? "ошибка потока"
             Task { @MainActor in
-                self?.onError?(message)
+                guard let self else { return }
+                if track.isRemote, !compact, let fallback = track.streamURL, fallback != url {
+                    self.open(track, autoplay: true, compact: true)
+                } else {
+                    self.onError?(message)
+                }
             }
         }
         player.replaceCurrentItem(with: item)

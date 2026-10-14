@@ -31,6 +31,7 @@ struct TrackRecord: Identifiable, Hashable, Codable, Sendable {
     var lyricsKind: String?
     var lyricsSource: String?
     var streamURL: URL?
+    var losslessURL: URL?
 
     enum CodingKeys: String, CodingKey {
         case id, title, artist, album, albumArtist, trackNumber, discNumber, year, genre

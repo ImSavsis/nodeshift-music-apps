@@ -57,6 +57,18 @@ targets:
           - audio
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        NSCameraUsageDescription: Камера нужна, чтобы сканировать QR-код комнаты «Слушать вместе»
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.audio
+              - public.mp3
+              - public.mpeg-4-audio
+              - org.xiph.flac
+              - com.microsoft.waveform-audio
+              - public.zip-archive
         CADisableMinimumFrameDurationOnPhone: true
         UIAppFonts:
           - Inter-Regular.ttf

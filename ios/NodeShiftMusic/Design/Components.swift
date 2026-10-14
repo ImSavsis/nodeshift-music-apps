@@ -256,11 +256,20 @@ struct FormatBadge: View {
     @Environment(\.s) private var s
 
     private var lossless: Bool {
-        ["flac", "wav", "alac", "aiff"].contains(format.lowercased())
+        AudioFormats.lossless.contains(format.lowercased()) || format.lowercased() == "atmos"
+    }
+
+    private var title: String {
+        switch format.lowercased() {
+        case "atmos": return "ATMOS"
+        case "eac3": return "DD+"
+        case "ac3": return "DD"
+        default: return format.uppercased()
+        }
     }
 
     var body: some View {
-        Text(format.uppercased())
+        Text(title)
             .font(.nsm(.monoRegular, s(9.5)))
             .tracking(0.05 * s(9.5))
             .foregroundStyle(lossless ? Palette.white : Palette.dim)

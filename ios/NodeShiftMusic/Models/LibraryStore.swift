@@ -45,6 +45,9 @@ final class LibraryStore {
     var formatFilter: FormatFilter = .all
     var viewMode: LibraryViewMode = .grid
     var menuTrack: TrackRecord?
+    var playlistTrack: TrackRecord?
+    var editTrack: TrackRecord?
+    var deleteCandidate: TrackRecord?
     private(set) var loaded = false
 
     @ObservationIgnored private var database: AppDatabase?
@@ -92,6 +95,54 @@ final class LibraryStore {
 
     func deletePlaylist(_ playlist: PlaylistRecord) {
         try? database?.deletePlaylist(id: playlist.id)
+    }
+
+    @discardableResult
+    func createPlaylist(name: String, trackIDs: [String] = []) -> PlaylistRecord? {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, let database else { return nil }
+        let record = PlaylistRecord(id: UUID().uuidString, name: clean, coverName: nil, siteId: nil, createdAt: Date())
+        do {
+            try database.save(record, trackIDs: trackIDs)
+        } catch {
+            return nil
+        }
+        return record
+    }
+
+    func renamePlaylist(_ playlist: PlaylistRecord, name: String) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, let database else { return }
+        var updated = playlist
+        updated.name = clean
+        let ids = (try? database.trackIDs(playlist: playlist.id)) ?? []
+        try? database.save(updated, trackIDs: ids)
+    }
+
+    @discardableResult
+    func addToPlaylist(_ playlist: PlaylistRecord, trackID: String) -> Bool {
+        guard let database else { return false }
+        var ids = (try? database.trackIDs(playlist: playlist.id)) ?? []
+        if ids.contains(trackID) {
+            return false
+        }
+        ids.append(trackID)
+        try? database.save(playlist, trackIDs: ids)
+        return true
+    }
+
+    func removeFromPlaylist(_ playlist: PlaylistRecord, trackID: String) {
+        guard let database else { return }
+        let ids = ((try? database.trackIDs(playlist: playlist.id)) ?? []).filter { $0 != trackID }
+        try? database.save(playlist, trackIDs: ids)
+    }
+
+    func save(_ track: TrackRecord) {
+        if let database {
+            try? database.save(track)
+        } else if let index = tracks.firstIndex(where: { $0.id == track.id }) {
+            tracks[index] = track
+        }
     }
 
     func changeViewMode(_ mode: LibraryViewMode) {

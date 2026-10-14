@@ -4,7 +4,7 @@ struct RootView: View {
     @State private var tab: AppTab = .tracks
     @State private var showMore = false
     @State private var barHeight: CGFloat = 0
-    @State private var showStorage = false
+    @State private var overlay: AppOverlay?
     @State private var model = AppModel(demo: AppModel.launchDemo)
 
     var body: some View {
@@ -36,14 +36,10 @@ struct RootView: View {
                     }
                     .zIndex(61)
                 }
-                if showStorage {
-                    StorageView {
-                        withAnimation(Motion.expoOut(0.32)) {
-                            showStorage = false
-                        }
-                    }
-                    .transition(.move(edge: .trailing))
-                    .zIndex(65)
+                if let overlay {
+                    overlayView(overlay)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(65)
                 }
                 if player.isFullPlayerOpen {
                     FullPlayerView()
@@ -54,9 +50,26 @@ struct RootView: View {
                     QueueSheet()
                         .zIndex(75)
                 }
+                if overlay == .together {
+                    TogetherView {
+                        withAnimation(Motion.expoOut(0.32)) {
+                            overlay = nil
+                        }
+                    }
+                    .transition(.move(edge: .bottom))
+                    .zIndex(78)
+                }
                 if let track = library.menuTrack {
                     TrackMenuSheet(track: track)
                         .zIndex(80)
+                }
+                if let track = library.playlistTrack {
+                    PlaylistPickerSheet(track: track)
+                        .zIndex(81)
+                }
+                if let track = library.editTrack {
+                    TrackEditSheet(track: track)
+                        .zIndex(82)
                 }
                 ToastHost()
                     .zIndex(90)
@@ -70,7 +83,12 @@ struct RootView: View {
             })
             .environment(\.openStorage, {
                 withAnimation(Motion.expoOut(0.32)) {
-                    showStorage = true
+                    overlay = .storage
+                }
+            })
+            .environment(\.openOverlay, { target in
+                withAnimation(Motion.expoOut(0.32)) {
+                    overlay = target
                 }
             })
             .environment(library)
@@ -82,9 +100,76 @@ struct RootView: View {
             .environment(model.sync)
             .environment(model.catalog)
             .environment(model.updates)
+            .environment(model.room)
+            .environment(model.enrichment)
+            .confirmationDialog(
+                "Удалить трек с телефона?",
+                isPresented: Binding(
+                    get: { library.deleteCandidate != nil },
+                    set: { if !$0 { library.deleteCandidate = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Удалить", role: .destructive) {
+                    if let track = library.deleteCandidate {
+                        player.queue.removeAll { $0.id == track.id }
+                        library.delete(track)
+                        model.toasts.show("Трек удалён")
+                    }
+                    library.deleteCandidate = nil
+                }
+                Button("Отмена", role: .cancel) {
+                    library.deleteCandidate = nil
+                }
+            } message: {
+                Text(library.deleteCandidate.map { "«\($0.title)» исчезнет с телефона." } ?? "")
+            }
         }
         .animation(Motion.page, value: tab)
         .onAppear(perform: bootstrap)
+        .onOpenURL { url in
+            handleOpen(url)
+        }
+    }
+
+    @ViewBuilder
+    private func overlayView(_ target: AppOverlay) -> some View {
+        let close = {
+            withAnimation(Motion.expoOut(0.32)) {
+                overlay = nil
+            }
+        }
+        switch target {
+        case .storage:
+            StorageView(onClose: close)
+        case .settings:
+            SettingsView(onClose: close)
+        case .wishlist:
+            WishlistView(onClose: close)
+        case let .playlist(id):
+            PlaylistDetailView(playlistID: id, onClose: close)
+        case .sitePlaylist, .together:
+            Color.clear
+        }
+    }
+
+    private func handleOpen(_ url: URL) {
+        if url.isFileURL {
+            model.importer.add(urls: [url])
+            model.toasts.show("Добавляем в библиотеку")
+            withAnimation(Motion.page) {
+                tab = .importer
+            }
+            return
+        }
+        if let code = RoomStore.normalize(url.absoluteString), url.absoluteString.contains("room") {
+            Task {
+                _ = await model.room.joinChecked(code: code, name: nil)
+                withAnimation(Motion.expoOut(0.32)) {
+                    overlay = .together
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -123,7 +208,19 @@ struct RootView: View {
         switch item {
         case .storage:
             withAnimation(Motion.expoOut(0.32)) {
-                showStorage = true
+                overlay = .storage
+            }
+        case .settings:
+            withAnimation(Motion.expoOut(0.32)) {
+                overlay = .settings
+            }
+        case .wishlist:
+            withAnimation(Motion.expoOut(0.32)) {
+                overlay = .wishlist
+            }
+        case .together:
+            withAnimation(Motion.expoOut(0.32)) {
+                overlay = .together
             }
         case .login:
             if model.site.isLoggedIn {
@@ -131,8 +228,6 @@ struct RootView: View {
             } else {
                 Task { _ = await model.site.login() }
             }
-        default:
-            model.toasts.show("\(item.title) скоро будет")
         }
     }
 
@@ -151,7 +246,7 @@ struct RootView: View {
                 case "import": tab = .importer
                 case "list": library.changeViewMode(.list)
                 case "more": showMore = true
-                case "storage": showStorage = true
+                case "storage": overlay = .storage
                 case "player", "lyrics", "queue":
                     if let first = sorted.first {
                         player.play(first, in: sorted)

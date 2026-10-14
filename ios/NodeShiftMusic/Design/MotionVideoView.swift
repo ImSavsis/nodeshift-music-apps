@@ -7,7 +7,7 @@ final class MotionBudget {
     static let shared = MotionBudget()
 
     private var active = 0
-    private let limit = 3
+    private let limit = 4
 
     func acquire() -> Bool {
         if active >= limit {
@@ -97,14 +97,16 @@ struct MotionOverlay: View {
     let motionName: String
     @State private var ready = false
     @State private var allowed = false
+    @State private var url: URL?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
-            if allowed && !reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled {
-                MotionVideoView(url: AppPaths.motionURL(motionName)) {
+            if allowed, !reduceMotion, SoundSettings.shared.motionCovers, let url {
+                MotionVideoView(url: url) {
                     ready = true
                 }
+                .id(url)
                 .opacity(ready ? 1 : 0)
                 .animation(.easeInOut(duration: 0.7), value: ready)
             }
@@ -119,6 +121,69 @@ struct MotionOverlay: View {
                 allowed = false
                 ready = false
             }
+        }
+        .task(id: "\(motionName)#\(allowed)") {
+            guard allowed else { return }
+            ready = false
+            url = await MotionStore.shared.squareURL(motionName)
+        }
+    }
+}
+
+struct MotionFullBleed: View {
+    let squareName: String?
+    let tallName: String?
+    @State private var ready = false
+    @State private var url: URL?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if let url, !reduceMotion, SoundSettings.shared.motionCovers {
+                MotionVideoView(url: url) {
+                    ready = true
+                }
+                .id(url)
+                .opacity(ready ? 1 : 0)
+                .animation(.easeInOut(duration: 0.8), value: ready)
+            }
+        }
+        .allowsHitTesting(false)
+        .task(id: "\(squareName ?? "")|\(tallName ?? "")") {
+            ready = false
+            url = await MotionStore.shared.tallURL(squareName: squareName, tallName: tallName)
+        }
+    }
+}
+
+struct TallCoverBackdrop: View {
+    let coverName: String?
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Palette.bg
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .transition(.opacity)
+            }
+        }
+        .clipped()
+        .animation(.easeInOut(duration: 0.5), value: image == nil)
+        .task(id: coverName) {
+            guard let coverName else {
+                image = nil
+                return
+            }
+            let url = CoverSource.url(for: coverName, maxPixel: 1000)
+            let base = await CoverImageLoader.shared.image(url: url, maxPixel: 1000)
+            guard let base else { return }
+            let tall = await Task.detached(priority: .userInitiated) {
+                TallMotionBuilder.tallPreview(from: base)
+            }.value
+            image = tall
         }
     }
 }

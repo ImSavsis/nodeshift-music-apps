@@ -14,6 +14,7 @@ final class AppModel {
     let updates: UpdateChecker
     let enrichment: EnrichmentService
     let catalog: CatalogStore
+    let room: RoomStore
     let demo: Bool
     private var nowPlaying: NowPlayingController?
     private var engine: PlaybackEngine?
@@ -63,6 +64,9 @@ final class AppModel {
         enrichment = enrich
         let cat = CatalogStore()
         catalog = cat
+        let roomStore = RoomStore()
+        room = roomStore
+        roomStore.attach(player: play, catalog: cat, toasts: toast)
         cat.attach(library: lib, site: siteSession, toasts: toast)
         siteSession.onSessionChanged = {
             Task { await cat.refreshLikes() }
@@ -106,6 +110,11 @@ final class AppModel {
             Task {
                 await siteSession.restore()
                 await updateChecker.check()
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                await enrich.enrichLibrary(force: false)
+                await MotionStore.shared.trimCache()
             }
         }
     }

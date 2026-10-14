@@ -14,20 +14,27 @@ struct TrackMenuSheet: View {
         let danger: Bool
     }
 
+    @Environment(CatalogStore.self) private var catalog
+
     private var entries: [Entry] {
-        if track.isRemote {
-            return [
-                Entry(id: "next", title: "Играть следом", icon: .listStart, danger: false),
-                Entry(id: "queue", title: "Добавить в очередь", icon: .listEnd, danger: false),
-            ]
-        }
-        return [
+        var list = [
             Entry(id: "next", title: "Играть следом", icon: .listStart, danger: false),
             Entry(id: "queue", title: "Добавить в очередь", icon: .listEnd, danger: false),
             Entry(id: "playlist", title: "В плейлист…", icon: .listMusic, danger: false),
-            Entry(id: "edit", title: "Редактировать", icon: .pencil, danger: false),
-            Entry(id: "delete", title: "Удалить с телефона", icon: .trash2, danger: true),
         ]
+        if track.siteId != nil {
+            list.append(Entry(
+                id: "wishlist",
+                title: catalog.isWishlisted(track) ? "Убрать из вишлиста" : "В вишлист",
+                icon: .bookmark,
+                danger: false
+            ))
+        }
+        if !track.isRemote {
+            list.append(Entry(id: "edit", title: "Редактировать", icon: .pencil, danger: false))
+            list.append(Entry(id: "delete", title: "Удалить с телефона", icon: .trash2, danger: true))
+        }
+        return list
     }
 
     var body: some View {
@@ -93,8 +100,22 @@ struct TrackMenuSheet: View {
         case "queue":
             player.addToQueue(track)
             toasts.show("Добавлено в очередь")
+        case "playlist":
+            library.menuTrack = nil
+            library.playlistTrack = track
+            return
+        case "wishlist":
+            catalog.toggleWishlist(track)
+        case "edit":
+            library.menuTrack = nil
+            library.editTrack = track
+            return
+        case "delete":
+            library.menuTrack = nil
+            library.deleteCandidate = track
+            return
         default:
-            toasts.show("Скоро будет")
+            break
         }
         close()
     }

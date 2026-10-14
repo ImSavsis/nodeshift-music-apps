@@ -38,10 +38,10 @@ final class NowPlayingController {
         center.nextTrackCommand.isEnabled = true
         center.previousTrackCommand.isEnabled = true
         center.changePlaybackPositionCommand.isEnabled = true
-        center.skipForwardCommand.isEnabled = true
-        center.skipBackwardCommand.isEnabled = true
-        center.skipForwardCommand.preferredIntervals = [15]
-        center.skipBackwardCommand.preferredIntervals = [15]
+        center.skipForwardCommand.isEnabled = false
+        center.skipBackwardCommand.isEnabled = false
+        center.seekForwardCommand.isEnabled = false
+        center.seekBackwardCommand.isEnabled = false
 
         center.playCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.player.resume() }
@@ -61,20 +61,6 @@ final class NowPlayingController {
         }
         center.previousTrackCommand.addTarget { [weak self] _ in
             Task { @MainActor in self?.player.previous() }
-            return .success
-        }
-        center.skipForwardCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.player.seek(to: self.player.time(at: Date()) + 15)
-            }
-            return .success
-        }
-        center.skipBackwardCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.player.seek(to: self.player.time(at: Date()) - 15)
-            }
             return .success
         }
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
