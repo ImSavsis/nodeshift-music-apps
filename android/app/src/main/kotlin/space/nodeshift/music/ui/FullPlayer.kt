@@ -59,6 +59,7 @@ import space.nodeshift.music.design.Radius
 import space.nodeshift.music.design.SeekBar
 import space.nodeshift.music.design.formatClock
 import space.nodeshift.music.design.pressable
+import space.nodeshift.music.design.tappable
 import space.nodeshift.music.design.rememberFrameTime
 import space.nodeshift.music.player.RepeatMode
 import kotlin.math.max
@@ -87,6 +88,7 @@ fun FullPlayerScreen() {
         Modifier
             .fillMaxSize()
             .graphicsLayer { translationY = drag }
+            .tappable {}
             .background(Palette.bg),
     ) {
         AmbientBackdrop(palette, player.isPlaying)
@@ -109,7 +111,19 @@ fun FullPlayerScreen() {
                     if (current == PlayerTab.Player) {
                         PlayerPane(track)
                     } else if (track != null) {
-                        Box(Modifier.padding(horizontal = s(20))) { LyricsPane(lyrics.state(track)) }
+                        Column(Modifier.fillMaxSize()) {
+                            Box(Modifier.weight(1f).padding(horizontal = s(20))) { LyricsPane(lyrics.state(track)) }
+                            Column(Modifier.fillMaxWidth().padding(horizontal = s(20)).padding(bottom = s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
+                                ProgressRow()
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                    IconToggle(LucideName.SkipBack, active = true, size = 48f, iconSize = 24f, filled = true) { player.previous() }
+                                    Box(Modifier.pressable(0.95f, 0.97f) { player.togglePlay() }) {
+                                        PlayCircle(size = 56f, playing = player.isPlaying, iconSize = 24f)
+                                    }
+                                    IconToggle(LucideName.SkipForward, active = true, size = 48f, iconSize = 24f, filled = true) { player.next() }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -198,7 +212,7 @@ private fun PlayerPane(track: TrackRecord?) {
     val player = graph.player
     val library = graph.library
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val side = min(maxWidth.value * 0.84f, maxHeight.value * 0.46f).dp
+        val side = max(120f, min(maxWidth.value * 0.84f, maxHeight.value - 330f)).dp
         val coverScale by animateFloatAsState(if (player.isPlaying) 1f else 0.92f, Motion.coverSpring(), label = "coverScale")
         Column(
             Modifier.fillMaxSize(),

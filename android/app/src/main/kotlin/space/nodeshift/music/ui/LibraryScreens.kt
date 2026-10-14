@@ -134,12 +134,11 @@ fun LibraryScreen() {
     val openStorage = LocalOpenStorage.current
     var chosen by remember { mutableStateOf<LibraryMode?>(null) }
     val mode = chosen ?: when (Prefs.string("nsm_library_mode")) {
-        "mine" -> LibraryMode.Mine
-        "catalog" -> LibraryMode.Catalog
-        else -> if (library.loaded && library.tracks.isEmpty()) LibraryMode.Catalog else LibraryMode.Mine
+        "mine2" -> LibraryMode.Mine
+        else -> LibraryMode.Catalog
     }
     val pick: (LibraryMode) -> Unit = { value ->
-        Prefs.putString("nsm_library_mode", if (value == LibraryMode.Catalog) "catalog" else "mine")
+        Prefs.putString("nsm_library_mode", if (value == LibraryMode.Catalog) "catalog2" else "mine2")
         chosen = value
     }
     val list = library.filtered
@@ -167,8 +166,8 @@ fun LibraryScreen() {
         }
         item(span = full) {
             Row(Modifier.padding(bottom = s(18)).reveal(1), horizontalArrangement = Arrangement.spacedBy(s(8))) {
-                Chip("Моя музыка", mode == LibraryMode.Mine) { pick(LibraryMode.Mine) }
-                Chip("Весь каталог", mode == LibraryMode.Catalog, icon = LucideName.Cloud) { pick(LibraryMode.Catalog) }
+                Chip("Все треки", mode == LibraryMode.Catalog, icon = LucideName.Cloud) { pick(LibraryMode.Catalog) }
+                Chip("На телефоне", mode == LibraryMode.Mine, icon = LucideName.Smartphone) { pick(LibraryMode.Mine) }
             }
         }
         if (mode == LibraryMode.Catalog) {

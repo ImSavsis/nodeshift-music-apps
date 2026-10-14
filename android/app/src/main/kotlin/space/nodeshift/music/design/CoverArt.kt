@@ -17,6 +17,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -154,9 +155,35 @@ object CoverImageLoader {
     }
 }
 
+object MotionFiles {
+    private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    suspend fun resolve(name: String): File? = withContext(Dispatchers.IO) {
+        if (!CoverSource.isRemote(name)) {
+            val local = AppPaths.motionFile(name)
+            return@withContext if (local.exists()) local else null
+        }
+        val file = name.removePrefix(CoverSource.PREFIX)
+        val directory = File(AppPaths.imageCacheDir, "motion").also { it.mkdirs() }
+        val target = File(directory, file)
+        if (target.exists() && target.length() > 20_000) return@withContext target
+        synchronized(locks.getOrPut(file) { Any() }) {
+            if (target.exists() && target.length() > 20_000) return@withContext target
+        }
+        try {
+            Net.download(SiteApi.motionUrl(file), target)
+            if (target.length() > 20_000) target else null
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+
 object MotionBudget {
     private var active = 0
-    private const val LIMIT = 3
+    private const val LIMIT = 4
 
     fun acquire(): Boolean {
         if (active >= LIMIT) return false
@@ -172,7 +199,7 @@ object MotionBudget {
 @Composable
 fun MotionOverlay(motionName: String, modifier: Modifier = Modifier) {
     val reduce = LocalReduceMotion.current
-    val lowPower = rememberLowPower()
+    val lowPower = false
     var allowed by remember { mutableStateOf(false) }
     var ready by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(if (ready) 1f else 0f, tween(700), label = "motionFade")
@@ -188,7 +215,16 @@ fun MotionOverlay(motionName: String, modifier: Modifier = Modifier) {
     }
     if (allowed && !reduce && !lowPower) {
         val context = LocalContext.current
-        val file = remember(motionName) { AppPaths.motionFile(motionName) }
+        val file by produceState<File?>(null, motionName) { value = MotionFiles.resolve(motionName) }
+        val ready0 = file
+        if (ready0 != null) MotionPlayer(ready0, motionName, modifier, alpha, onReady = { ready = true })
+    }
+}
+
+@Composable
+private fun MotionPlayer(file: File, motionName: String, modifier: Modifier, alpha: Float, onReady: () -> Unit) {
+    run {
+        val context = LocalContext.current
         val player = remember(motionName) {
             ExoPlayer.Builder(context).build().apply {
                 volume = 0f
@@ -198,7 +234,7 @@ fun MotionOverlay(motionName: String, modifier: Modifier = Modifier) {
                 playWhenReady = true
                 addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() {
-                        ready = true
+                        onReady()
                     }
                 })
                 prepare()
@@ -225,7 +261,7 @@ fun CoverArt(
 ) {
     val s = LocalScale.current
     val reduce = LocalReduceMotion.current
-    val lowPower = rememberLowPower()
+    val lowPower = false
     val shape = RoundedCornerShape(s(radius))
     var image by remember(coverName, maxPixel) {
         mutableStateOf(coverName?.let { CoverImageLoader.cached(it, maxPixel) })
@@ -235,7 +271,7 @@ fun CoverArt(
     }
     val drifting = live && !reduce && !lowPower && image != null
     val drift = remember(coverName) { CoverMotion.drift(coverName ?: "") }
-    val hasMotion = remember(motionName) { motionName != null && AppPaths.motionFile(motionName).exists() }
+    val hasMotion = remember(motionName) { motionName != null && (CoverSource.isRemote(motionName) || AppPaths.motionFile(motionName).exists()) }
     Box(
         modifier
             .aspectRatio(1f)

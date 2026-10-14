@@ -23,6 +23,7 @@ fun SiteTrack.catalogRecord(): TrackRecord = TrackRecord(
     durationMs = ((durationSeconds ?: 0.0) * 1000).toInt(),
     format = (format ?: "mp3").lowercase(),
     coverName = coverFilename?.let { CoverSource.remoteName(it) },
+    motionName = motionFilename?.let { CoverSource.remoteName(it) },
     playCount = playCount ?: 0,
     siteId = id.value,
     streamUrl = SiteApi.audioUrl(this, false),
