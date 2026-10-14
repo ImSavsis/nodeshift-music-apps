@@ -39,6 +39,17 @@ class PresenceHub:
         self.sinks: dict[str, set[web.WebSocketResponse]] = {}
         self.states: dict[str, dict] = {}
         self.tokens: dict[str, tuple[str, float]] = {}
+        self.versions: dict[str, int] = {}
+        self.waiters: dict[str, asyncio.Condition] = {}
+
+    def condition(self, user: str) -> asyncio.Condition:
+        return self.waiters.setdefault(user, asyncio.Condition())
+
+    async def bump_version(self, user: str) -> None:
+        self.versions[user] = self.versions.get(user, 0) + 1
+        condition = self.condition(user)
+        async with condition:
+            condition.notify_all()
 
     def clean(self, body: dict) -> dict | None:
         title = clip(body.get("title"), 128)
@@ -61,6 +72,7 @@ class PresenceHub:
         }
 
     async def broadcast(self, user: str, payload: dict) -> None:
+        await self.bump_version(user)
         for sink in list(self.sinks.get(user, ())):
             if sink.closed:
                 self.sinks[user].discard(sink)
@@ -158,6 +170,26 @@ async def handle_ws(request: web.Request) -> web.StreamResponse:
     return socket
 
 
+async def handle_poll(request: web.Request) -> web.Response:
+    user = await identify(request)
+    if user is None:
+        return json_response({"error": "unauthorized"}, 401)
+    hub: PresenceHub = request.app["presence"]
+    try:
+        since = int(request.query.get("since", "-1"))
+        wait = min(30.0, max(0.0, float(request.query.get("wait", "0"))))
+    except ValueError:
+        since, wait = -1, 0.0
+    if hub.versions.get(user, 0) == since and wait > 0:
+        condition = hub.condition(user)
+        try:
+            async with condition:
+                await asyncio.wait_for(condition.wait_for(lambda: hub.versions.get(user, 0) != since), timeout=wait)
+        except asyncio.TimeoutError:
+            pass
+    return json_response({"version": hub.versions.get(user, 0), "state": hub.states.get(user)})
+
+
 async def handle_art_upload(request: web.Request) -> web.Response:
     user = await identify(request)
     if user is None:
@@ -201,6 +233,7 @@ def install(app: web.Application, verify=verify_site_token) -> None:
     app["verify"] = verify
     app.router.add_post("/presence", handle_update)
     app.router.add_get("/presence/ws", handle_ws)
+    app.router.add_get("/presence/poll", handle_poll)
     app.router.add_post("/presence/art", handle_art_upload)
     app.router.add_get("/art/{name}", handle_art_get)
 

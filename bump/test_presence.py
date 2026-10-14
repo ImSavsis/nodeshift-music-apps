@@ -113,3 +113,30 @@ async def test_stale_state_swept(aiohttp_client):
     hub.states["1"]["ts"] = int(time.time() * 1000) - 120_000
     assert hub.sweep_stale() == ["1"]
     assert "1" not in hub.states
+
+
+async def test_poll_returns_immediately_when_version_differs(aiohttp_client):
+    client = await make_client(aiohttp_client)
+    await client.post("/presence", json=state(), headers=auth("good-a"))
+    response = await client.get("/presence/poll", params={"since": "0", "wait": "5"}, headers=auth("good-a"))
+    body = await response.json()
+    assert body["version"] >= 1
+    assert body["state"]["title"] == "Everyday"
+
+
+async def test_poll_waits_for_change(aiohttp_client):
+    client = await make_client(aiohttp_client)
+    first = await (await client.get("/presence/poll", params={"since": "-1"}, headers=auth("good-a"))).json()
+    waiting = asyncio.ensure_future(client.get("/presence/poll", params={"since": str(first["version"]), "wait": "5"}, headers=auth("good-a")))
+    await asyncio.sleep(0.2)
+    await client.post("/presence", json=state(title="Later"), headers=auth("good-a"))
+    body = await (await waiting).json()
+    assert body["state"]["title"] == "Later"
+
+
+async def test_poll_times_out_with_same_version(aiohttp_client):
+    client = await make_client(aiohttp_client)
+    first = await (await client.get("/presence/poll", params={"since": "-1"}, headers=auth("good-a"))).json()
+    body = await (await client.get("/presence/poll", params={"since": str(first["version"]), "wait": "0.3"}, headers=auth("good-a"))).json()
+    assert body["version"] == first["version"]
+    assert body["state"] is None

@@ -6,5 +6,6 @@ pub mod media_server;
 pub mod model;
 pub mod net;
 pub mod paths;
+pub mod presence;
 pub mod tags;
 pub mod update;

@@ -314,6 +314,56 @@ impl Site {
         self.authorized_with(&format!("/api/music/favorites/{track_id}"), method).await?;
         Ok(())
     }
+
+    pub async fn access_token(&self) -> Result<String> {
+        let existing = self.access.lock().ok().and_then(|value| value.clone());
+        match existing {
+            Some(token) => Ok(token),
+            None => self.refresh_access().await,
+        }
+    }
+
+    pub async fn publish_presence(&self, body: &Value) -> Result<()> {
+        let mut token = self.access_token().await?;
+        for attempt in 0..2 {
+            let response = self
+                .http
+                .post(format!("{BASE}/app/bump/presence"))
+                .timeout(std::time::Duration::from_secs(10))
+                .bearer_auth(&token)
+                .json(body)
+                .send()
+                .await?;
+            if response.status().as_u16() == 401 && attempt == 0 {
+                token = self.refresh_access().await?;
+                continue;
+            }
+            return Ok(());
+        }
+        Ok(())
+    }
+
+    pub async fn presence_poll(&self, since: i64) -> Result<String> {
+        let mut token = self.access_token().await?;
+        for attempt in 0..2 {
+            let response = self
+                .http
+                .get(format!("{BASE}/app/bump/presence/poll?since={since}&wait=25"))
+                .timeout(std::time::Duration::from_secs(40))
+                .bearer_auth(&token)
+                .send()
+                .await?;
+            if response.status().as_u16() == 401 && attempt == 0 {
+                token = self.refresh_access().await?;
+                continue;
+            }
+            if !response.status().is_success() {
+                return Err(SiteError::Server(response.status().as_u16()).into());
+            }
+            return Ok(response.text().await?);
+        }
+        Err(SiteError::Unauthorized.into())
+    }
 }
 
 fn media(folder: &str, name: &str) -> String {

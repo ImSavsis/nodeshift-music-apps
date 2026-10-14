@@ -1,3 +1,5 @@
+#[cfg(windows)]
+mod discord;
 mod secure;
 
 use std::path::PathBuf;
@@ -180,6 +182,11 @@ async fn catalog_like(state: State<'_, AppState>, site_id: String, value: bool) 
 async fn catalog_played(state: State<'_, AppState>, site_id: String) -> Result<(), String> {
     state.engine.catalog_register_play(&site_id).await;
     Ok(())
+}
+
+#[tauri::command]
+async fn presence_publish(state: State<'_, AppState>, body: serde_json::Value) -> Result<(), String> {
+    text(state.engine.site().publish_presence(&body).await)
 }
 
 #[tauri::command]
@@ -391,6 +398,8 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 restore.site_restore().await;
             });
+            #[cfg(windows)]
+            discord::spawn(engine.clone(), base.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -418,6 +427,7 @@ pub fn run() {
             catalog_likes,
             catalog_like,
             catalog_played,
+            presence_publish,
             site_lyrics_get,
             site_snapshot,
             site_login,
