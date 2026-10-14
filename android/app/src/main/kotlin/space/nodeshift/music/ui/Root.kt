@@ -65,6 +65,7 @@ fun NsmRoot(activity: MainActivity) {
     var tab by rememberSaveable { mutableStateOf(AppTab.Tracks) }
     var showMore by remember { mutableStateOf(false) }
     var showStorage by remember { mutableStateOf(false) }
+    var showTogether by remember { mutableStateOf(false) }
     var chromeHeight by remember { mutableStateOf(0.dp) }
     val scope = rememberCoroutineScope()
 
@@ -111,9 +112,10 @@ fun NsmRoot(activity: MainActivity) {
     }
 
     BackHandler(
-        enabled = player.isQueueOpen || library.menuTrack != null || player.isFullPlayerOpen || showStorage || showMore || tab != AppTab.Tracks,
+        enabled = showTogether || player.isQueueOpen || library.menuTrack != null || player.isFullPlayerOpen || showStorage || showMore || tab != AppTab.Tracks,
     ) {
         when {
+            showTogether -> showTogether = false
             library.menuTrack != null -> library.menuTrack = null
             player.isQueueOpen -> player.isQueueOpen = false
             player.isFullPlayerOpen -> player.isFullPlayerOpen = false
@@ -167,6 +169,7 @@ fun NsmRoot(activity: MainActivity) {
             ) { item ->
                 when (item) {
                     MoreItem.Storage -> showStorage = true
+                    MoreItem.Together -> showTogether = true
                     MoreItem.Login -> if (site.isLoggedIn) site.logout() else scope.launch { site.login(activity) }
                     else -> graph.toasts.show("${item.title} скоро будет")
                 }
@@ -183,6 +186,7 @@ fun NsmRoot(activity: MainActivity) {
             ) { FullPlayerScreen() }
             QueueSheet()
             TrackMenuSheet()
+            TogetherSheet(showTogether) { showTogether = false }
             ToastHost()
         }
     }

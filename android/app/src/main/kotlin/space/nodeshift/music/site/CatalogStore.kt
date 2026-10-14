@@ -98,7 +98,7 @@ class CatalogStore(
         load(false)
     }
 
-    private fun record(item: SiteTrack): TrackRecord =
+    fun record(item: SiteTrack): TrackRecord =
         library.tracks.firstOrNull { it.siteId == item.id.value } ?: item.catalogRecord()
 
     private fun load(reset: Boolean) {

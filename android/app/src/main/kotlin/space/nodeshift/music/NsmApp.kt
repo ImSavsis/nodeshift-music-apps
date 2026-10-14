@@ -35,6 +35,8 @@ class AppGraph(app: Application) {
     val updates = UpdateChecker(app)
     val enrichment = EnrichmentService(database, lyrics, scope)
     val catalog = CatalogStore(library, site, toasts, scope)
+    val room = space.nodeshift.music.site.RoomStore(player, catalog, toasts, scope)
+    val bump = space.nodeshift.music.site.BumpSession(app, scope)
 
     init {
         player.onTrackStarted = { track ->

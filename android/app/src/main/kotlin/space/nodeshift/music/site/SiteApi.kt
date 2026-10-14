@@ -146,6 +146,9 @@ data class SitePlaylistDetail(
 @Serializable
 data class SiteLyrics(val synced: String? = null, val plain: String? = null, val source: String? = null)
 
+@Serializable
+data class SiteRoomCreated(val code: String)
+
 class SiteException(val kind: Kind, val code: Int = 0) : Exception(kind.name) {
     enum class Kind { Cancelled, NoToken, BadCallback, Unauthorized, Server }
 }
@@ -293,4 +296,28 @@ object SiteApi {
     fun thumbUrl(name: String): String = media("thumbs", name.substringBeforeLast('.') + ".webp")
 
     fun motionUrl(name: String): String = media("motion", name)
+
+    suspend fun freshAccessToken(): String? {
+        if (!hasSession) return null
+        return try {
+            refreshAccess()
+        } catch (_: Exception) {
+            access
+        }
+    }
+
+    suspend fun createRoom(): String = json.decodeFromString<SiteRoomCreated>(authorized("/api/music/rooms", "POST")).code
+
+    suspend fun roomExists(code: String): Boolean = try {
+        Net.text("$BASE/api/music/rooms/$code")
+        true
+    } catch (error: space.nodeshift.music.net.NetException) {
+        if (error.status == 404) false else throw error
+    }
+
+    fun roomSocketUrl(code: String): String = "wss://music.nodeshift.space/api/music/rooms/$code/ws"
+
+    fun roomLink(code: String): String = "$BASE/room/$code"
+
+    const val BUMP = "$BASE/app/bump"
 }

@@ -90,6 +90,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-session:1.11.1")
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("com.google.zxing:core:3.5.3")
     implementation("io.github.kyant0:taglib:1.0.5")
     implementation("org.apache.commons:commons-compress:1.28.0")
     implementation("org.tukaani:xz:1.12")
