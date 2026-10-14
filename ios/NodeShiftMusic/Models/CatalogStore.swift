@@ -90,7 +90,10 @@ final class CatalogStore {
     }
 
     func record(for item: SiteTrack) -> TrackRecord {
-        if let local = library?.tracks.first(where: { $0.siteId == item.id.value }) {
+        if var local = library?.tracks.first(where: { $0.siteId == item.id.value }) {
+            if local.motionName == nil, let motion = item.motionFilename {
+                local.motionName = CoverSource.remoteName(motion)
+            }
             return local
         }
         var record = item.catalogRecord()
