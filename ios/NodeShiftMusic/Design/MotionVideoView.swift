@@ -220,7 +220,7 @@ struct BlurredCover: View {
                     .scaleEffect(1.3)
                     .transition(.opacity)
             }
-            Color.black.opacity(0.35)
+            Color.black.opacity(0.55)
         }
         .clipped()
         .animation(.easeInOut(duration: 0.5), value: image == nil)
@@ -236,6 +236,7 @@ struct BlurredCover: View {
 
 struct ImmersiveCover: View {
     let track: TrackRecord
+    var topInset: CGFloat = 0
 
     private var hasLocalTall: Bool {
         guard let name = track.motion3x4Name else { return false }
@@ -261,11 +262,12 @@ struct ImmersiveCover: View {
                         }
                     }
                     .frame(width: proxy.size.width, height: proxy.size.width)
+                    .padding(.top, topInset)
                     .mask(
                         LinearGradient(
                             stops: [
                                 .init(color: .black, location: 0),
-                                .init(color: .black, location: 0.82),
+                                .init(color: .black, location: 0.9),
                                 .init(color: .clear, location: 1),
                             ],
                             startPoint: .top,

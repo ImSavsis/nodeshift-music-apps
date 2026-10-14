@@ -23,6 +23,11 @@ struct FullPlayerView: View {
         _tab = State(initialValue: ProcessInfo.processInfo.arguments.contains("-nsm-lyrics") ? .lyrics : .player)
     }
 
+    private static var windowTop: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.compactMap { $0.keyWindow }.first?.safeAreaInsets.top ?? 47
+    }
+
     private var immersive: Bool {
         guard tab == .player, let track = player.current, !reduceMotion else { return false }
         return SoundSettings.shared.motionCovers && MotionStore.hasAny(track)
@@ -59,7 +64,7 @@ struct FullPlayerView: View {
         Palette.bg.ignoresSafeArea()
         if immersive, let track = player.current {
             ZStack {
-                ImmersiveCover(track: track)
+                ImmersiveCover(track: track, topInset: Self.windowTop + s(96))
                 LinearGradient(
                     stops: [
                         .init(color: Color.black.opacity(0.45), location: 0),
