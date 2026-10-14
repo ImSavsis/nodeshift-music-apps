@@ -93,7 +93,15 @@ final class CatalogStore {
         if let local = library?.tracks.first(where: { $0.siteId == item.id.value }) {
             return local
         }
-        return item.catalogRecord()
+        var record = item.catalogRecord()
+        CatalogMotion.shared.apply(to: &record)
+        return record
+    }
+
+    private func applyFoundMotion() {
+        for index in tracks.indices where tracks[index].isRemote {
+            CatalogMotion.shared.apply(to: &tracks[index])
+        }
     }
 
     private func fetchPage(reset: Bool) async {
@@ -146,6 +154,11 @@ final class CatalogStore {
                 }
                 await self.fetchPage(reset: false)
                 try? await Task.sleep(nanoseconds: 120_000_000)
+            }
+            if let self, token == self.generation, self.query.isEmpty {
+                CatalogMotion.shared.run(tracks: self.tracks) { [weak self] in
+                    self?.applyFoundMotion()
+                }
             }
         }
     }

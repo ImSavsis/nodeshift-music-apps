@@ -16,17 +16,26 @@ actor MotionStore {
         track.motionName != nil || track.motion3x4Name != nil
     }
 
+    nonisolated static func localURL(_ name: String) -> URL? {
+        let url: URL
+        if name.hasPrefix("cache:") {
+            url = AppPaths.motionCacheDir.appendingPathComponent(String(name.dropFirst(6)))
+        } else {
+            url = AppPaths.motionURL(name)
+        }
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     nonisolated static func hasLocalFile(_ name: String) -> Bool {
         if isRemote(name) {
             return true
         }
-        return FileManager.default.fileExists(atPath: AppPaths.motionURL(name).path)
+        return localURL(name) != nil
     }
 
     func squareURL(_ name: String) async -> URL? {
         guard Self.isRemote(name) else {
-            let local = AppPaths.motionURL(name)
-            return FileManager.default.fileExists(atPath: local.path) ? local : nil
+            return Self.localURL(name)
         }
         let file = String(name.dropFirst(CoverSource.remotePrefix.count))
         guard !file.isEmpty, !file.contains("/") else { return nil }
@@ -57,11 +66,8 @@ actor MotionStore {
     }
 
     func tallURL(squareName: String?, tallName: String?) async -> URL? {
-        if let tallName, !Self.isRemote(tallName) {
-            let local = AppPaths.motionURL(tallName)
-            if FileManager.default.fileExists(atPath: local.path) {
-                return local
-            }
+        if let tallName, !Self.isRemote(tallName), let local = Self.localURL(tallName) {
+            return local
         }
         guard let squareName, let square = await squareURL(squareName) else { return nil }
         let stem = square.deletingPathExtension().lastPathComponent
@@ -100,7 +106,7 @@ actor MotionStore {
         return size > 20_000
     }
 
-    func trimCache(limit: Int64 = 200 * 1024 * 1024) {
+    func trimCache(limit: Int64 = 500 * 1024 * 1024) {
         let directory = AppPaths.motionCacheDir
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: directory,

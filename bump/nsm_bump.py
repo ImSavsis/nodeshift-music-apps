@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 from aiohttp import web
 
+import presence
+
 BUMP_WINDOW_MS = 450
 BUMP_WAIT_SECONDS = 3.5
 PAIR_TTL_SECONDS = 180
@@ -258,6 +260,7 @@ def make_app() -> web.Application:
     app.router.add_get("/pair/{pair}/room", handle_fetch)
     app.on_startup.append(start_background)
     app.on_cleanup.append(stop_background)
+    presence.install(app)
     return app
 
 

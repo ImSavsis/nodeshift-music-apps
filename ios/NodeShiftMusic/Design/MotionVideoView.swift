@@ -239,7 +239,7 @@ struct ImmersiveCover: View {
 
     private var hasLocalTall: Bool {
         guard let name = track.motion3x4Name else { return false }
-        return FileManager.default.fileExists(atPath: AppPaths.motionURL(name).path)
+        return MotionStore.localURL(name) != nil
     }
 
     var body: some View {
