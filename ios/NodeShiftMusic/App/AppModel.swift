@@ -15,6 +15,7 @@ final class AppModel {
     let enrichment: EnrichmentService
     let catalog: CatalogStore
     let room: RoomStore
+    private let presence = PresenceReporter()
     let demo: Bool
     private var nowPlaying: NowPlayingController?
     private var engine: PlaybackEngine?
@@ -67,6 +68,7 @@ final class AppModel {
         let roomStore = RoomStore()
         room = roomStore
         roomStore.attach(player: play, catalog: cat, toasts: toast)
+        presence.attach(player: play, site: siteSession)
         cat.attach(library: lib, site: siteSession, toasts: toast)
         siteSession.onSessionChanged = {
             Task { await cat.refreshLikes() }

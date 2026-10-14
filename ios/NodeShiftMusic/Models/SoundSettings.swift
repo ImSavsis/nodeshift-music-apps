@@ -79,8 +79,10 @@ final class SoundSettings {
     private(set) var atmosMode: AtmosMode
     private(set) var motionCovers: Bool
     private(set) var ambientMotion: Bool
+    private(set) var discordPresence: Bool
 
     private init() {
+        discordPresence = UserDefaults.standard.object(forKey: "nsm_discord_presence") as? Bool ?? true
         let defaults = UserDefaults.standard
         streamQuality = StreamQuality(rawValue: defaults.string(forKey: "nsm_stream_quality") ?? "") ?? .auto
         atmosMode = AtmosMode(rawValue: defaults.string(forKey: "nsm_atmos_mode") ?? "") ?? .auto
@@ -107,6 +109,11 @@ final class SoundSettings {
     func setAmbientMotion(_ value: Bool) {
         ambientMotion = value
         UserDefaults.standard.set(value, forKey: "nsm_ambient_motion")
+    }
+
+    func setDiscordPresence(_ value: Bool) {
+        discordPresence = value
+        UserDefaults.standard.set(value, forKey: "nsm_discord_presence")
     }
 
     func wantsLossless() -> Bool {

@@ -37,6 +37,7 @@ class AppGraph(app: Application) {
     val catalog = CatalogStore(library, site, toasts, scope)
     val room = space.nodeshift.music.site.RoomStore(player, catalog, toasts, scope)
     val bump = space.nodeshift.music.site.BumpSession(app, scope)
+    private val presence = space.nodeshift.music.site.PresenceReporter(player, site, scope)
 
     init {
         player.onTrackStarted = { track ->
@@ -53,6 +54,7 @@ class AppGraph(app: Application) {
         importer.onTrackRemoved = { id -> player.removeTrack(id) }
         importer.onTrackAdded = { track -> enrichment.enqueue(track) }
         player.connect()
+        presence.start()
         scope.launch {
             site.restore()
             updates.check()

@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import space.nodeshift.music.data.Prefs
 import space.nodeshift.music.net.Net
@@ -320,4 +321,34 @@ object SiteApi {
     fun roomLink(code: String): String = "$BASE/room/$code"
 
     const val BUMP = "$BASE/app/bump"
+
+    suspend fun publishPresence(body: org.json.JSONObject) {
+        if (!hasSession) return
+        runCatching {
+            var token = access ?: refreshAccess()
+            for (attempt in 0 until 2) {
+                val request = Net.postJson("$BUMP/presence", body.toString(), mapOf("Authorization" to "Bearer $token"))
+                val code = Net.execute(request).use { it.code }
+                if (code == 401 && attempt == 0) {
+                    token = refreshAccess()
+                    continue
+                }
+                break
+            }
+        }
+    }
+
+    suspend fun uploadPresenceArt(jpeg: ByteArray): String? {
+        val token = access ?: return null
+        return try {
+            val request = Net.request("$BUMP/presence/art", mapOf("Authorization" to "Bearer $token"))
+                .post(jpeg.toRequestBody("image/jpeg".toMediaType()))
+                .build()
+            Net.execute(request).use { response ->
+                if (!response.isSuccessful) null else org.json.JSONObject(response.body.string()).optString("url").ifEmpty { null }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

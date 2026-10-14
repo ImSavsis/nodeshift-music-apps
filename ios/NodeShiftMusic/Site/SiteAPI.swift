@@ -421,6 +421,43 @@ final class SiteAPI: @unchecked Sendable {
         base.appendingPathComponent("room").appendingPathComponent(code)
     }
 
+    func publishPresence(_ body: [String: Any]) async {
+        guard hasSession else { return }
+        var token = tokens().access
+        if token == nil {
+            token = try? await refreshAccess()
+        }
+        for attempt in 0..<2 {
+            guard let bearer = token, let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+            var request = Net.request(bumpBase.appendingPathComponent("presence"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 10
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+            request.httpBody = data
+            guard let (_, response) = try? await Net.session.data(for: request), let http = response as? HTTPURLResponse else { return }
+            if http.statusCode == 401, attempt == 0 {
+                token = try? await refreshAccess()
+                continue
+            }
+            return
+        }
+    }
+
+    func uploadPresenceArt(_ jpeg: Data) async -> String? {
+        guard hasSession, let bearer = tokens().access else { return nil }
+        var request = Net.request(bumpBase.appendingPathComponent("presence").appendingPathComponent("art"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        request.httpBody = jpeg
+        guard let (data, response) = try? await Net.session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return json["url"] as? String
+    }
+
     var bumpBase: URL {
         base.appendingPathComponent("app").appendingPathComponent("bump")
     }

@@ -116,6 +116,11 @@ struct SettingsView: View {
                     detail: "Плавное движение фона, обложек и пятен света",
                     isOn: Binding(get: { settings.ambientMotion }, set: { settings.setAmbientMotion($0) })
                 )
+                SettingToggle(
+                    title: "Показывать в Discord",
+                    detail: "Что ты слушаешь, с обложкой. Появится в Discord на компьютере, где запущено NS Music для Windows",
+                    isOn: Binding(get: { settings.discordPresence }, set: { settings.setDiscordPresence($0) })
+                )
                 Text("Если в iPhone включён режим уменьшения движения, анимации отключаются системой.")
                     .font(.nsm(.interRegular, s(12)))
                     .foregroundStyle(Palette.dim)
