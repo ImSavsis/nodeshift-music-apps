@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -119,6 +120,14 @@ pub fn start_seconds(presence: &Presence, local_now_ms: u64) -> u64 {
     origin.saturating_sub(presence.position_ms) / 1000
 }
 
+pub fn track_link(presence: &Presence) -> (String, &'static str) {
+    if !presence.site_id.trim().is_empty() {
+        return (format!("{SITE}/track/{}", presence.site_id.trim()), "Слушать на NodeShift");
+    }
+    let query: String = format!("{} {}", presence.artist.trim(), presence.title.trim()).chars().take(60).collect();
+    (format!("https://music.apple.com/search?term={}", utf8_percent_encode(query.trim(), NON_ALPHANUMERIC)), "Найти трек в Apple Music")
+}
+
 pub fn build_activity(presence: &Presence, name: &str, local_now_ms: u64) -> Value {
     let artist = if presence.artist.trim().is_empty() { "Burmalda".to_string() } else { limit(&presence.artist, 128) };
     let mut assets = json!({
@@ -140,9 +149,9 @@ pub fn build_activity(presence: &Presence, name: &str, local_now_ms: u64) -> Val
         let end = start + presence.duration_ms / 1000;
         activity["timestamps"] = json!({ "start": start, "end": end });
     }
-    if !presence.site_id.is_empty() {
-        activity["buttons"] = json!([{ "label": "Слушать на NodeShift", "url": format!("{SITE}/track/{}", presence.site_id) }]);
-    }
+    let (link, label) = track_link(presence);
+    activity["details_url"] = json!(link);
+    activity["buttons"] = json!([{ "label": label, "url": link }]);
     activity
 }
 
@@ -150,6 +159,7 @@ pub fn plain_activity(activity: &Value) -> Value {
     let mut plain = activity.clone();
     if let Some(object) = plain.as_object_mut() {
         object.remove("buttons");
+        object.remove("details_url");
     }
     if let Some(assets) = plain.get_mut("assets").and_then(Value::as_object_mut) {
         assets.remove("large_image");
@@ -218,6 +228,30 @@ mod tests {
         assert_eq!(activity["timestamps"]["start"], 1_700_000_087u64);
         assert_eq!(activity["timestamps"]["end"], 1_700_000_327u64);
         assert_eq!(activity["buttons"][0]["url"], "https://music.nodeshift.space/track/183");
+        assert_eq!(activity["buttons"][0]["label"], "Слушать на NodeShift");
+        assert_eq!(activity["details_url"], "https://music.nodeshift.space/track/183");
+    }
+
+    #[test]
+    fn tracks_outside_the_site_link_to_an_apple_music_search() {
+        let mut presence = sample();
+        presence.site_id.clear();
+        presence.artist = "Jamiroquai".into();
+        presence.title = "Alright (Remastered 2013)".into();
+        let activity = build_activity(&presence, "Burmalda", NOW);
+        let url = activity["buttons"][0]["url"].as_str().unwrap();
+        assert_eq!(url, "https://music.apple.com/search?term=Jamiroquai%20Alright%20%28Remastered%202013%29");
+        assert_eq!(activity["details_url"], url);
+        assert_eq!(activity["buttons"][0]["label"], "Найти трек в Apple Music");
+    }
+
+    #[test]
+    fn long_titles_keep_the_link_short() {
+        let mut presence = sample();
+        presence.site_id.clear();
+        presence.title = "ё".repeat(300);
+        let (link, _) = track_link(&presence);
+        assert!(link.len() < 512, "{}", link.len());
     }
 
     #[test]
@@ -252,7 +286,7 @@ mod tests {
         let activity = build_activity(&presence, "Burmalda", NOW);
         assert!(activity.get("timestamps").is_none());
         assert!(activity["assets"].get("large_image").is_none());
-        assert!(activity.get("buttons").is_none());
+        assert!(activity["buttons"][0]["url"].as_str().unwrap().starts_with("https://music.apple.com/search?term=Jamiroquai"));
         assert_eq!(activity["assets"]["small_text"], "Пауза");
     }
 
@@ -269,6 +303,7 @@ mod tests {
         let activity = build_activity(&sample(), "Burmalda", NOW);
         let plain = plain_activity(&activity);
         assert!(plain.get("buttons").is_none());
+        assert!(plain.get("details_url").is_none());
         assert!(plain["assets"].get("large_image").is_none());
         assert_eq!(plain["details"], activity["details"]);
         assert_eq!(plain["timestamps"], activity["timestamps"]);
