@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -10,6 +11,8 @@ from aiohttp import web
 
 import presence
 
+log = logging.getLogger("nsm.bump")
+
 BUMP_WINDOW_MS = 450
 BUMP_WAIT_SECONDS = 3.5
 PAIR_TTL_SECONDS = 180
@@ -20,6 +23,7 @@ RATE_WINDOW_SECONDS = 60
 CLOCK_SLACK_MS = 6000
 CODE_PATTERN = re.compile(r"^[A-Z0-9]{4,8}$")
 MAX_WAIT_SECONDS = 20
+SWEEP_INTERVAL_SECONDS = 30
 
 
 def now_ms() -> int:
@@ -28,14 +32,6 @@ def now_ms() -> int:
 
 def clean_text(value, limit: int = 40) -> str:
     return str(value or "").strip()[:limit]
-
-
-def client_ip(request: web.Request) -> str:
-    if request.remote in ("127.0.0.1", "::1"):
-        forwarded = request.headers.get("X-Forwarded-For", "")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-    return request.remote or "unknown"
 
 
 def network_key(ip: str) -> str:
@@ -136,7 +132,7 @@ async def handle_time(request: web.Request) -> web.Response:
 
 async def handle_bump(request: web.Request) -> web.Response:
     hub: Hub = request.app["hub"]
-    ip = client_ip(request)
+    ip = presence.client_ip(request)
     if not hub.allowed(ip):
         return json_response({"error": "slow down"}, 429)
     try:
@@ -235,8 +231,11 @@ async def handle_fetch(request: web.Request) -> web.Response:
 async def sweeper(app: web.Application) -> None:
     hub: Hub = app["hub"]
     while True:
-        await asyncio.sleep(30)
-        hub.sweep()
+        await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
+        try:
+            hub.sweep()
+        except Exception:
+            log.exception("bump sweep failed")
 
 
 async def start_background(app: web.Application) -> None:
@@ -252,7 +251,7 @@ async def stop_background(app: web.Application) -> None:
 
 
 def make_app() -> web.Application:
-    app = web.Application(client_max_size=4096)
+    app = web.Application(client_max_size=presence.ART_REQUEST_LIMIT + 1, middlewares=[presence.limit_body])
     app["hub"] = Hub()
     app.router.add_get("/time", handle_time)
     app.router.add_post("/bump", handle_bump)
@@ -265,8 +264,10 @@ def make_app() -> web.Application:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     web.run_app(
         make_app(),
         host=os.environ.get("NSM_BUMP_HOST", "127.0.0.1"),
         port=int(os.environ.get("NSM_BUMP_PORT", "8097")),
+        access_log=None,
     )

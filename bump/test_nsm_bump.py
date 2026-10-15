@@ -150,3 +150,19 @@ async def test_rate_limit(aiohttp_client, monkeypatch):
         statuses.append(response.status)
     assert statuses[:3] == [200, 200, 200]
     assert statuses[3:] == [429, 429]
+
+
+async def test_sweeper_survives_errors(aiohttp_client, monkeypatch):
+    calls = []
+
+    def flaky(self):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(nsm_bump.Hub, "sweep", flaky)
+    monkeypatch.setattr(nsm_bump, "SWEEP_INTERVAL_SECONDS", 0.01)
+    client = await make_client(aiohttp_client)
+    await asyncio.sleep(0.3)
+    assert len(calls) >= 2
+    assert not client.app["sweeper"].done()

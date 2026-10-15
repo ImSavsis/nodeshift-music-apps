@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - bump/**
+      - site/server/**
       - .github/workflows/bump.yml
   pull_request:
     paths:
       - bump/**
+      - site/server/**
   workflow_dispatch:
 
 jobs:
@@ -28,3 +30,19 @@ jobs:
       - name: Tests
         working-directory: bump
         run: python -m pytest -q
+
+      - name: Nginx snippet keeps the bump locations
+        run: |
+          grep -q "/app/bump/" site/server/nsm-app.conf
+          for location in /app/bump/presence/ws /app/bump/presence/art /app/bump/art/ /app/bump/; do
+            grep -Eq "^location[^{]* $location \{" site/server/nsm-app.conf || {
+              echo "site/server/nsm-app.conf has no location for $location"
+              exit 1
+            }
+          done
+
+      - name: Deploy files
+        run: |
+          grep -q "^Restart=always" bump/deploy/nsm-bump.service
+          bash -n bump/deploy/install.sh
+          bash -n site/server/install.sh

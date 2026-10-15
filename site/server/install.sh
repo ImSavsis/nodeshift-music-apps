@@ -6,6 +6,13 @@ VHOST=/etc/nginx/sites-available/music.nodeshift.space
 SNIPPET=/etc/nginx/snippets/nsm-app.conf
 WEB=/var/www/nsm-app
 
+for location in /app/bump/presence/ws /app/bump/presence/art /app/bump/art/ /app/bump/; do
+  grep -Eq "^location[^{]* $location \{" "$SRC/nsm-app.conf" || {
+    echo "nsm-app.conf has no location for $location, refusing to overwrite $SNIPPET"
+    exit 1
+  }
+done
+
 id nsmapp >/dev/null 2>&1 || useradd --system --home-dir /var/lib/nsmapp --shell /usr/sbin/nologin nsmapp
 
 install -d -o nsmapp -g nsmapp -m 755 "$WEB" "$WEB/app" "$WEB/app/update" "$WEB/app/bin" "$WEB/app/bin/ios" "$WEB/app/bin/android" "$WEB/app/bin/win"
@@ -16,6 +23,11 @@ install -m 755 "$SRC/nsm_app_sync.py" /opt/nsm-app-sync/nsm_app_sync.py
 install -m 644 "$SRC/nsm-app-sync.service" "$SRC/nsm-app-sync.timer" /etc/systemd/system/
 
 install -d -m 755 /etc/nginx/snippets
+SNIPPET_BACKUP=""
+if [ -f "$SNIPPET" ] && ! cmp -s "$SRC/nsm-app.conf" "$SNIPPET"; then
+  SNIPPET_BACKUP="$SNIPPET.bak-$(date +%Y%m%d%H%M%S)"
+  cp -a "$SNIPPET" "$SNIPPET_BACKUP"
+fi
 install -m 644 "$SRC/nsm-app.conf" "$SNIPPET"
 
 BACKUP=""
@@ -39,6 +51,10 @@ if ! nginx -t; then
   if [ -n "$BACKUP" ]; then
     cp -a "$BACKUP" "$VHOST"
     echo "nginx config test failed, vhost restored from $BACKUP"
+  fi
+  if [ -n "$SNIPPET_BACKUP" ]; then
+    cp -a "$SNIPPET_BACKUP" "$SNIPPET"
+    echo "nginx config test failed, snippet restored from $SNIPPET_BACKUP"
   fi
   exit 1
 fi
