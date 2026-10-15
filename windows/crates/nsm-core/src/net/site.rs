@@ -1,4 +1,6 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -6,6 +8,7 @@ use serde_json::{json, Value};
 
 pub const BASE: &str = "https://music.nodeshift.space";
 pub const MEDIA: &str = "https://burmalda.savsis.xyz";
+const REFRESH_COOLDOWN: Duration = Duration::from_secs(60);
 
 pub trait TokenStore: Send + Sync {
     fn get(&self, key: &str) -> Option<String>;
@@ -132,13 +135,29 @@ pub struct Site {
     store: Arc<dyn TokenStore>,
     access: Mutex<Option<String>>,
     refresh: Mutex<Option<String>>,
+    futile_refresh: Mutex<Option<Instant>>,
+    rejected: AtomicBool,
 }
 
 impl Site {
     pub fn new(http: reqwest::Client, store: Arc<dyn TokenStore>) -> Self {
         let access = store.get("access");
         let refresh = store.get("refresh");
-        Self { http, store, access: Mutex::new(access), refresh: Mutex::new(refresh) }
+        Self { http, store, access: Mutex::new(access), refresh: Mutex::new(refresh), futile_refresh: Mutex::new(None), rejected: AtomicBool::new(false) }
+    }
+
+    fn refresh_cooling_down(&self) -> bool {
+        self.futile_refresh.lock().ok().and_then(|value| *value).is_some_and(|at| at.elapsed() < REFRESH_COOLDOWN)
+    }
+
+    fn note_futile_refresh(&self, futile: bool) {
+        if let Ok(mut value) = self.futile_refresh.lock() {
+            *value = futile.then(Instant::now);
+        }
+    }
+
+    pub fn was_rejected(&self) -> bool {
+        self.rejected.load(Ordering::SeqCst)
     }
 
     pub fn has_session(&self) -> bool {
@@ -157,6 +176,7 @@ impl Site {
                 *value = Some(refresh.to_string());
             }
             self.store.set("refresh", refresh);
+            self.rejected.store(false, Ordering::SeqCst);
         }
     }
 
@@ -209,6 +229,7 @@ impl Site {
             .await?;
         let status = response.status();
         if status.as_u16() == 401 || status.as_u16() == 400 {
+            self.rejected.store(true, Ordering::SeqCst);
             self.clear();
             return Err(SiteError::Unauthorized.into());
         }
@@ -329,18 +350,30 @@ impl Site {
             let response = self
                 .http
                 .post(format!("{BASE}/app/bump/presence"))
-                .timeout(std::time::Duration::from_secs(10))
+                .timeout(Duration::from_secs(10))
                 .bearer_auth(&token)
                 .json(body)
                 .send()
                 .await?;
-            if response.status().as_u16() == 401 && attempt == 0 {
+            let status = response.status();
+            if status.as_u16() == 401 && attempt == 0 {
+                if self.refresh_cooling_down() {
+                    return Err(SiteError::Unauthorized.into());
+                }
                 token = self.refresh_access().await?;
                 continue;
             }
+            if status.as_u16() == 401 {
+                self.note_futile_refresh(true);
+                return Err(SiteError::Unauthorized.into());
+            }
+            if !status.is_success() {
+                return Err(SiteError::Server(status.as_u16()).into());
+            }
+            self.note_futile_refresh(false);
             return Ok(());
         }
-        Ok(())
+        Err(SiteError::Unauthorized.into())
     }
 
     pub async fn presence_poll(&self, since: i64) -> Result<String> {
@@ -349,17 +382,25 @@ impl Site {
             let response = self
                 .http
                 .get(format!("{BASE}/app/bump/presence/poll?since={since}&wait=25"))
-                .timeout(std::time::Duration::from_secs(40))
+                .timeout(Duration::from_secs(40))
                 .bearer_auth(&token)
                 .send()
                 .await?;
             if response.status().as_u16() == 401 && attempt == 0 {
+                if self.refresh_cooling_down() {
+                    return Err(SiteError::Unauthorized.into());
+                }
                 token = self.refresh_access().await?;
                 continue;
+            }
+            if response.status().as_u16() == 401 {
+                self.note_futile_refresh(true);
+                return Err(SiteError::Unauthorized.into());
             }
             if !response.status().is_success() {
                 return Err(SiteError::Server(response.status().as_u16()).into());
             }
+            self.note_futile_refresh(false);
             return Ok(response.text().await?);
         }
         Err(SiteError::Unauthorized.into())

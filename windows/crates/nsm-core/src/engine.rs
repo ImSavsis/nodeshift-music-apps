@@ -996,17 +996,39 @@ impl Engine {
     }
 
     pub async fn site_restore(&self) {
-        if !self.inner.site.has_session() {
-            return;
-        }
-        match self.inner.site.me().await {
-            Ok(user) => self.with_site(|state| state.user = Some(user)),
-            Err(error) => {
-                if matches!(error.downcast_ref::<SiteError>(), Some(SiteError::Unauthorized)) {
-                    self.with_site(|state| state.user = None);
+        let mut wait = std::time::Duration::from_secs(2);
+        loop {
+            if !self.inner.site.has_session() {
+                return;
+            }
+            match self.inner.site.me().await {
+                Ok(user) => {
+                    self.with_site(|state| state.user = Some(user));
+                    return;
+                }
+                Err(error) => {
+                    if matches!(error.downcast_ref::<SiteError>(), Some(SiteError::Unauthorized | SiteError::NoToken)) {
+                        self.with_site(|state| {
+                            state.user = None;
+                            state.needs_login = true;
+                        });
+                        return;
+                    }
                 }
             }
+            tokio::time::sleep(wait).await;
+            wait = (wait * 2).min(std::time::Duration::from_secs(60));
         }
+    }
+
+    pub fn site_session_lost(&self) {
+        if !self.inner.site.was_rejected() {
+            return;
+        }
+        self.with_site(|state| {
+            state.user = None;
+            state.needs_login = true;
+        });
     }
 
     pub async fn site_login_url(&self) -> Result<String> {
@@ -1042,6 +1064,7 @@ impl Engine {
                     state.user = Some(user);
                     state.busy = false;
                     state.last_error = None;
+                    state.needs_login = false;
                 });
                 Ok(())
             }
@@ -1060,12 +1083,13 @@ impl Engine {
     }
 
     pub fn site_logout(&self) {
-        self.inner.site.clear();
         self.with_site(|state| {
             state.user = None;
+            state.needs_login = false;
             state.playlists.clear();
             state.favorites = idle_list("favorites", "Понравившиеся");
         });
+        self.inner.site.clear();
     }
 
     pub async fn site_refresh(&self) {

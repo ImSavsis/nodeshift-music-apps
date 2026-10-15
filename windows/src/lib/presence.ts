@@ -1,4 +1,5 @@
 import { usePlayerStore } from '../store/player';
+import { createPresenceSender, type PresenceBody } from './presenceSender';
 import { invoke, isTauri } from './tauri';
 
 const COVERS = 'https://burmalda.savsis.xyz/covers/';
@@ -22,19 +23,12 @@ function coverFile(name: string | null): string | null {
   return null;
 }
 
-function publish(body: Record<string, unknown>) {
-  invoke('presence_publish', { body }).catch(() => undefined);
-}
-
-function send() {
+function currentBody(): PresenceBody {
   const state = usePlayerStore.getState();
   const track = state.currentTrack;
-  if (!track) {
-    publish({ stop: true });
-    return;
-  }
+  if (!track) return { stop: true, device: deviceId() };
   const file = coverFile(track.coverName);
-  publish({
+  return {
     device: deviceId(),
     platform: 'win',
     playing: state.isPlaying,
@@ -45,17 +39,21 @@ function send() {
     duration_ms: Math.round((state.duration > 0 ? state.duration : track.durationMs / 1000) * 1000),
     cover: file ? `${COVERS}${encodeURIComponent(file)}` : undefined,
     site_id: track.siteId ?? undefined
-  });
+  };
 }
 
 export function startPresence() {
   if (!isTauri) return;
+  const sender = createPresenceSender({
+    build: currentBody,
+    deliver: (body) => invoke('presence_publish', { body })
+  });
   let heartbeat: number | undefined;
   const sync = () => {
-    send();
+    sender.request();
     window.clearInterval(heartbeat);
     heartbeat = undefined;
-    if (usePlayerStore.getState().isPlaying) heartbeat = window.setInterval(send, 15000);
+    if (usePlayerStore.getState().isPlaying) heartbeat = window.setInterval(sender.request, 15000);
   };
   usePlayerStore.subscribe((state, previous) => {
     if (state.currentTrack?.id !== previous.currentTrack?.id || state.isPlaying !== previous.isPlaying || state.seekToken !== previous.seekToken) {

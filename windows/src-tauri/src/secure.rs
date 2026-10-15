@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use base64::Engine;
+use nsm_core::atomic;
 use nsm_core::net::site::TokenStore;
 
 #[cfg(windows)]
@@ -58,7 +59,7 @@ pub struct DpapiStore {
 impl DpapiStore {
     pub fn open(path: PathBuf) -> Self {
         let engine = base64::engine::general_purpose::STANDARD;
-        let stored: HashMap<String, String> = std::fs::read_to_string(&path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default();
+        let stored: HashMap<String, String> = atomic::read_with_backup(&path, |bytes| serde_json::from_slice(bytes).ok()).unwrap_or_default();
         let mut values = HashMap::new();
         for (key, encoded) in stored {
             let plain = engine.decode(encoded).ok().and_then(|bytes| dpapi::unprotect(&bytes)).and_then(|bytes| String::from_utf8(bytes).ok());
@@ -76,7 +77,7 @@ impl DpapiStore {
             .filter_map(|(key, value)| dpapi::protect(value.as_bytes()).map(|bytes| (key.clone(), engine.encode(bytes))))
             .collect();
         if let Ok(text) = serde_json::to_string(&encoded) {
-            let _ = std::fs::write(&self.path, text);
+            let _ = atomic::write_with_backup(&self.path, text.as_bytes());
         }
     }
 }

@@ -1,5 +1,9 @@
 pub mod algo;
+pub mod atomic;
+pub mod autostart;
+pub mod bridge;
 pub mod db;
+pub mod discord_ipc;
 pub mod engine;
 pub mod import_support;
 pub mod media_server;

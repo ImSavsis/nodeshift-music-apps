@@ -3,8 +3,15 @@ use std::path::Path;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-pub const DEFAULT_APP_ID: &str = "1543000586209853490";
+pub const DEFAULT_APP_ID: &str = "1498024819675889704";
 pub const DEFAULT_NAME: &str = "Burmalda";
+pub const PIPE_PREFIX: &str = r"\\.\pipe\discord-ipc-";
+pub const OP_HANDSHAKE: u32 = 0;
+pub const OP_FRAME: u32 = 1;
+pub const OP_CLOSE: u32 = 2;
+pub const OP_PING: u32 = 3;
+pub const OP_PONG: u32 = 4;
+pub const MAX_FRAME_BYTES: usize = 1 << 20;
 const SITE: &str = "https://music.nodeshift.space";
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -29,6 +36,10 @@ pub struct Presence {
     pub platform: String,
     #[serde(default)]
     pub ts: u64,
+    #[serde(default)]
+    pub device: String,
+    #[serde(default)]
+    pub age_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +78,21 @@ impl DiscordConfig {
         }
         config
     }
+
+    pub fn save_enabled(base: &Path, enabled: bool) -> std::io::Result<()> {
+        let path = base.join("discord.json");
+        let mut value = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .filter(Value::is_object)
+            .unwrap_or_else(|| json!({}));
+        value["enabled"] = json!(enabled);
+        crate::atomic::write_atomic(&path, &serde_json::to_vec_pretty(&value).unwrap_or_default())
+    }
+}
+
+pub fn pipe_path(index: u32) -> String {
+    format!("{PIPE_PREFIX}{index}")
 }
 
 pub fn parse_poll(text: &str) -> Option<(u64, Option<Presence>)> {
@@ -85,7 +111,15 @@ fn limit(text: &str, count: usize) -> String {
     value
 }
 
-pub fn build_activity(presence: &Presence, name: &str) -> Value {
+pub fn start_seconds(presence: &Presence, local_now_ms: u64) -> u64 {
+    let origin = match presence.age_ms {
+        Some(age) => local_now_ms.saturating_sub(age),
+        None => presence.ts,
+    };
+    origin.saturating_sub(presence.position_ms) / 1000
+}
+
+pub fn build_activity(presence: &Presence, name: &str, local_now_ms: u64) -> Value {
     let artist = if presence.artist.trim().is_empty() { "Burmalda".to_string() } else { limit(&presence.artist, 128) };
     let mut assets = json!({
         "large_text": limit(if presence.album.trim().is_empty() { &presence.title } else { &presence.album }, 128),
@@ -102,7 +136,7 @@ pub fn build_activity(presence: &Presence, name: &str) -> Value {
         "assets": assets,
     });
     if presence.playing && presence.duration_ms > 0 {
-        let start = (presence.ts.saturating_sub(presence.position_ms)) / 1000;
+        let start = start_seconds(presence, local_now_ms);
         let end = start + presence.duration_ms / 1000;
         activity["timestamps"] = json!({ "start": start, "end": end });
     }
@@ -112,19 +146,42 @@ pub fn build_activity(presence: &Presence, name: &str) -> Value {
     activity
 }
 
-pub fn encode_frame(opcode: u32, payload: &Value) -> Vec<u8> {
-    let body = serde_json::to_vec(payload).unwrap_or_default();
+pub fn plain_activity(activity: &Value) -> Value {
+    let mut plain = activity.clone();
+    if let Some(object) = plain.as_object_mut() {
+        object.remove("buttons");
+    }
+    if let Some(assets) = plain.get_mut("assets").and_then(Value::as_object_mut) {
+        assets.remove("large_image");
+    }
+    plain
+}
+
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum FrameError {
+    #[error("frame of {0} bytes is larger than the limit")]
+    TooLarge(usize),
+}
+
+pub fn encode_raw(opcode: u32, body: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(8 + body.len());
     frame.extend_from_slice(&opcode.to_le_bytes());
     frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
-    frame.extend_from_slice(&body);
+    frame.extend_from_slice(body);
     frame
 }
 
-pub fn decode_header(header: [u8; 8]) -> (u32, usize) {
+pub fn encode_frame(opcode: u32, payload: &Value) -> Vec<u8> {
+    encode_raw(opcode, &serde_json::to_vec(payload).unwrap_or_default())
+}
+
+pub fn decode_header(header: [u8; 8]) -> Result<(u32, usize), FrameError> {
     let opcode = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
     let length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
-    (opcode, length.min(1 << 20))
+    if length > MAX_FRAME_BYTES {
+        return Err(FrameError::TooLarge(length));
+    }
+    Ok((opcode, length))
 }
 
 #[cfg(test)]
@@ -143,20 +200,47 @@ mod tests {
             playing: true,
             platform: "ios".into(),
             ts: 1_700_000_100_000,
+            device: "phone".into(),
+            age_ms: Some(2_500),
         }
     }
 
+    const NOW: u64 = 1_700_000_100_000;
+
     #[test]
     fn activity_is_listening_with_progress() {
-        let activity = build_activity(&sample(), "Burmalda");
+        let activity = build_activity(&sample(), "Burmalda", NOW);
         assert_eq!(activity["type"], 2);
         assert_eq!(activity["name"], "Burmalda");
         assert_eq!(activity["details"], "Everyday (Remastered 2016)");
         assert_eq!(activity["state"], "Jamiroquai");
         assert_eq!(activity["assets"]["large_image"], "https://burmalda.savsis.xyz/covers/a.jpg");
+        assert_eq!(activity["timestamps"]["start"], 1_700_000_087u64);
+        assert_eq!(activity["timestamps"]["end"], 1_700_000_327u64);
+        assert_eq!(activity["buttons"][0]["url"], "https://music.nodeshift.space/track/183");
+    }
+
+    #[test]
+    fn start_follows_age_not_the_hub_clock() {
+        let mut presence = sample();
+        presence.ts = 1_650_000_000_000;
+        let skewed = build_activity(&presence, "Burmalda", NOW);
+        assert_eq!(skewed["timestamps"]["start"], 1_700_000_087u64);
+        presence.age_ms = Some(0);
+        assert_eq!(start_seconds(&presence, NOW), 1_700_000_090);
+        presence.age_ms = Some(12_000);
+        assert_eq!(start_seconds(&presence, NOW), 1_700_000_078);
+        presence.age_ms = Some(u64::MAX);
+        assert_eq!(start_seconds(&presence, NOW), 0);
+    }
+
+    #[test]
+    fn start_falls_back_to_the_hub_timestamp_without_age() {
+        let mut presence = sample();
+        presence.age_ms = None;
+        let activity = build_activity(&presence, "Burmalda", NOW + 99_000);
         assert_eq!(activity["timestamps"]["start"], 1_700_000_090u64);
         assert_eq!(activity["timestamps"]["end"], 1_700_000_330u64);
-        assert_eq!(activity["buttons"][0]["url"], "https://music.nodeshift.space/track/183");
     }
 
     #[test]
@@ -165,7 +249,7 @@ mod tests {
         presence.playing = false;
         presence.cover = "http://x/y.jpg".into();
         presence.site_id.clear();
-        let activity = build_activity(&presence, "Burmalda");
+        let activity = build_activity(&presence, "Burmalda", NOW);
         assert!(activity.get("timestamps").is_none());
         assert!(activity["assets"].get("large_image").is_none());
         assert!(activity.get("buttons").is_none());
@@ -176,16 +260,44 @@ mod tests {
     fn short_text_is_padded() {
         let mut presence = sample();
         presence.title = "A".into();
-        let activity = build_activity(&presence, "Burmalda");
+        let activity = build_activity(&presence, "Burmalda", NOW);
         assert_eq!(activity["details"].as_str().unwrap().chars().count(), 3);
+    }
+
+    #[test]
+    fn plain_activity_drops_buttons_and_cover() {
+        let activity = build_activity(&sample(), "Burmalda", NOW);
+        let plain = plain_activity(&activity);
+        assert!(plain.get("buttons").is_none());
+        assert!(plain["assets"].get("large_image").is_none());
+        assert_eq!(plain["details"], activity["details"]);
+        assert_eq!(plain["timestamps"], activity["timestamps"]);
+    }
+
+    #[test]
+    fn pipe_names_use_the_device_namespace() {
+        assert_eq!(pipe_path(0), r"\\.\pipe\discord-ipc-0");
+        assert_eq!(pipe_path(9), r"\\.\pipe\discord-ipc-9");
+        assert!(pipe_path(3).starts_with(r"\\.\pipe\"));
     }
 
     #[test]
     fn frames_roundtrip() {
         let frame = encode_frame(1, &json!({"cmd": "SET_ACTIVITY"}));
-        let (opcode, length) = decode_header(frame[..8].try_into().unwrap());
-        assert_eq!(opcode, 1);
-        assert_eq!(length, frame.len() - 8);
+        let (opcode, length) = decode_header(frame[..8].try_into().unwrap()).unwrap();
+        assert_eq!((opcode, length), (1, frame.len() - 8));
+        let raw = encode_raw(OP_PONG, b"abc");
+        assert_eq!(decode_header(raw[..8].try_into().unwrap()), Ok((OP_PONG, 3)));
+        assert_eq!(&raw[8..], b"abc");
+    }
+
+    #[test]
+    fn oversize_frames_are_rejected() {
+        let mut header = [0u8; 8];
+        header[4..].copy_from_slice(&((MAX_FRAME_BYTES as u32) + 1).to_le_bytes());
+        assert_eq!(decode_header(header), Err(FrameError::TooLarge(MAX_FRAME_BYTES + 1)));
+        header[4..].copy_from_slice(&(MAX_FRAME_BYTES as u32).to_le_bytes());
+        assert!(decode_header(header).is_ok());
     }
 
     #[test]
@@ -193,11 +305,24 @@ mod tests {
         let text = r#"{"version": 3, "state": {"title": "T", "artist": "A", "playing": true, "position_ms": 5, "duration_ms": 9, "ts": 7}}"#;
         let (version, state) = parse_poll(text).unwrap();
         assert_eq!(version, 3);
-        assert_eq!(state.unwrap().title, "T");
+        let state = state.unwrap();
+        assert_eq!(state.title, "T");
+        assert_eq!(state.age_ms, None);
+        assert_eq!(state.device, "");
         let (version, state) = parse_poll(r#"{"version": 4, "state": null}"#).unwrap();
         assert_eq!(version, 4);
         assert!(state.is_none());
         assert!(parse_poll("nope").is_none());
+    }
+
+    #[test]
+    fn poll_state_carries_device_and_age() {
+        let text = r#"{"version": 1760000000, "state": {"title": "T", "device": "abc", "age_ms": 1234, "ts": 7}}"#;
+        let (version, state) = parse_poll(text).unwrap();
+        assert_eq!(version, 1_760_000_000);
+        let state = state.unwrap();
+        assert_eq!(state.device, "abc");
+        assert_eq!(state.age_ms, Some(1234));
     }
 
     #[test]
@@ -209,5 +334,18 @@ mod tests {
         assert_eq!(config.app_id, "42");
         assert_eq!(config.name, "Mine");
         assert!(!config.enabled);
+    }
+
+    #[test]
+    fn saving_the_switch_keeps_other_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        DiscordConfig::save_enabled(dir.path(), false).unwrap();
+        assert!(!DiscordConfig::load(dir.path()).enabled);
+        std::fs::write(dir.path().join("discord.json"), r#"{"app_id": "42", "enabled": false}"#).unwrap();
+        DiscordConfig::save_enabled(dir.path(), true).unwrap();
+        let config = DiscordConfig::load(dir.path());
+        assert!(config.enabled);
+        assert_eq!(config.app_id, "42");
+        assert!(!dir.path().join("discord.json.tmp").exists());
     }
 }

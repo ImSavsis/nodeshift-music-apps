@@ -43,7 +43,7 @@ jobs:
           workspaces: windows
 
       - name: Rust core tests
-        run: cargo test -p nsm-core
+        run: cargo test -p nsm-core --locked
 
       - name: Install web deps
         run: npm ci
@@ -80,7 +80,7 @@ jobs:
       - name: Build installer
         env:
           NSM_BUILD: ${{ github.run_number }}
-        run: npx tauri build --bundles nsis
+        run: npx tauri build --bundles nsis -- --locked
 
       - name: Manifest
         working-directory: .

@@ -1,19 +1,26 @@
-#[cfg(windows)]
-mod discord;
 mod secure;
+mod tray;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
+use nsm_core::autostart::{self, StartupPlan};
+use nsm_core::bridge::{Bridge, BridgeLog};
 use nsm_core::engine::{CatalogPage, CatalogSource, Decision, Emit, Engine, EngineConfig, Event, ImportSnapshot, LyricsDto, SiteSnapshot};
 use nsm_core::media_server::{self, MediaServer};
 use nsm_core::model::{Playlist, Track};
 use nsm_core::paths::Paths;
 use nsm_core::update::{self, UpdateManifest};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_window_state::StateFlags;
+
+const HIDDEN_FLAG: &str = "--hidden";
+const FIRST_RUN_NOTE: &str = "NS Music остаётся в трее, когда закрываешь окно: так Discord видит, что ты слушаешь. Выйти можно из меню значка.";
 
 const BUILD: &str = match option_env!("NSM_BUILD") {
     Some(value) => value,
@@ -290,11 +297,19 @@ fn forward(app: &AppHandle, event: Event) {
 }
 
 fn focus_main(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    let window = match app.get_webview_window("main") {
+        Some(window) => Some(window),
+        None => open_main_window(app, true).ok().flatten(),
+    };
+    if let Some(window) = window {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+fn started_hidden() -> bool {
+    std::env::args().any(|argument| argument == HIDDEN_FLAG)
 }
 
 fn audio_args(args: &[String]) -> Vec<PathBuf> {
@@ -305,7 +320,10 @@ fn handle_url(app: &AppHandle, link: &str) {
     if !link.starts_with("nodeshiftmusic://auth/callback") {
         return;
     }
-    let engine = app.state::<AppState>().engine.clone();
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let engine = state.engine.clone();
     let link = link.to_string();
     tauri::async_runtime::spawn(async move {
         let _ = engine.site_complete_login(&link).await;
@@ -313,20 +331,19 @@ fn handle_url(app: &AppHandle, link: &str) {
     focus_main(app);
 }
 
-fn open_main_window(app: &tauri::App) -> tauri::Result<()> {
+fn open_main_window(app: &AppHandle, visible: bool) -> tauri::Result<Option<WebviewWindow>> {
     let Some(config) = app.config().app.windows.first().cloned() else {
-        return Ok(());
+        return Ok(None);
     };
     #[allow(unused_mut)]
-    let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app, &config)?.visible(visible);
     #[cfg(windows)]
     if let Some(port) = std::env::var("NSM_DEBUG_PORT").ok().filter(|value| !value.is_empty()) {
         builder = builder.additional_browser_args(&format!(
             "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port} --remote-allow-origins=* --disable-gpu"
         ));
     }
-    builder.build()?;
-    Ok(())
+    Ok(Some(builder.build()?))
 }
 
 fn install_panic_log() {
@@ -340,23 +357,84 @@ fn install_panic_log() {
     }));
 }
 
+fn apply_autostart(app: &AppHandle, base: &Path) -> bool {
+    let plan = autostart::startup_plan(autostart::read_choice(base), autostart::managed_environment());
+    let StartupPlan::Enable { first_run } = plan else {
+        return false;
+    };
+    if app.autolaunch().enable().is_err() {
+        return false;
+    }
+    if first_run {
+        let _ = autostart::write_choice(base, true);
+    }
+    first_run
+}
+
+fn announce_residency(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(6)).await;
+        let _ = app.emit("nsm:toast", FIRST_RUN_NOTE);
+    });
+}
+
+fn keep_in_tray(window: &tauri::Window, event: &WindowEvent) {
+    let WindowEvent::CloseRequested { api, .. } = event else {
+        return;
+    };
+    if window.label() == "main" && tray::resident(window.app_handle()) {
+        api.prevent_close();
+        let _ = window.hide();
+    }
+}
+
+fn start_bridge(runtime: &tokio::runtime::Handle, engine: &Engine, base: &Path) -> Option<Bridge> {
+    #[cfg(windows)]
+    {
+        Some(nsm_core::bridge::start_discord(runtime, engine.clone(), base.to_path_buf()))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (runtime, engine, base);
+        None
+    }
+}
+
+fn settle_in_tray(app: &AppHandle, base: &Path, bridge: Option<Bridge>) -> bool {
+    match tray::install(app, base.to_path_buf(), bridge) {
+        Ok(()) => true,
+        Err(error) => {
+            BridgeLog::new(base.join("bridge.log")).line(&format!("tray unavailable, the window will close normally: {error}"));
+            false
+        }
+    }
+}
+
 pub fn run() {
     install_panic_log();
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|argument| argument == HIDDEN_FLAG) {
+                return;
+            }
             focus_main(app);
             let files = audio_args(&args);
             if !files.is_empty() {
-                app.state::<AppState>().engine.start_import(files);
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.engine.start_import(files);
+                }
             }
             for argument in &args {
                 handle_url(app, argument);
             }
         }))
+        .plugin(tauri_plugin_autostart::Builder::new().arg(HIDDEN_FLAG).build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(StateFlags::all() & !StateFlags::VISIBLE).build())
+        .on_window_event(keep_in_tray)
         .setup(|app| {
             let base = match std::env::var_os("NSM_DATA_DIR") {
                 Some(custom) => PathBuf::from(custom),
@@ -367,11 +445,21 @@ pub fn run() {
             let emit: Emit = Arc::new(move |event| forward(&handle, event));
             let tokens = Arc::new(secure::DpapiStore::open(base.join("tokens.dat")));
             let runtime = tauri::async_runtime::handle().inner().clone();
+            let bridge_runtime = runtime.clone();
             let catalog = if std::env::var_os("NSM_OFFLINE").is_some() { CatalogSource::None } else { CatalogSource::Network };
             let engine = Engine::new(EngineConfig { paths, catalog, tokens, emit, runtime })?;
             let media = tauri::async_runtime::block_on(media_server::start(engine.clone()))?;
             app.manage(AppState { engine: engine.clone(), media });
-            open_main_window(app)?;
+            app.manage(tray::TrayFlag::default());
+
+            let first_run = apply_autostart(app.handle(), &base);
+            let bridge = start_bridge(&bridge_runtime, &engine, &base);
+            let resident = settle_in_tray(app.handle(), &base, bridge);
+            app.state::<tray::TrayFlag>().set(resident);
+            open_main_window(app.handle(), !(resident && started_hidden()))?;
+            if resident && first_run {
+                announce_residency(app.handle());
+            }
 
             let deep = app.deep_link();
             #[cfg(any(windows, target_os = "linux"))]
@@ -398,8 +486,6 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 restore.site_restore().await;
             });
-            #[cfg(windows)]
-            discord::spawn(engine.clone(), base.clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -441,6 +527,13 @@ pub fn run() {
             update_check,
             update_install,
         ])
-        .run(tauri::generate_context!())
-        .expect("run");
+        .build(tauri::generate_context!())
+        .expect("build");
+    app.run(|app, event| {
+        if let tauri::RunEvent::ExitRequested { code: None, api, .. } = event {
+            if tray::resident(app) {
+                api.prevent_exit();
+            }
+        }
+    });
 }
