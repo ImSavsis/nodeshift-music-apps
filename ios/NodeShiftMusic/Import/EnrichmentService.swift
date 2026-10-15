@@ -79,15 +79,15 @@ final class EnrichmentService {
     }
 
     private func siteChecked(_ key: String) -> Bool {
-        let checks = UserDefaults.standard.dictionary(forKey: "nsm_site_motion_checked") as? [String: Double] ?? [:]
+        let checks = UserDefaults.standard.dictionary(forKey: "nsm_site_motion_checked_v2") as? [String: Double] ?? [:]
         guard let stamp = checks[key] else { return false }
-        return Date().timeIntervalSince1970 - stamp < 3 * 86_400
+        return Date().timeIntervalSince1970 - stamp < 6 * 3_600
     }
 
     private func markSiteChecked(_ key: String) {
-        var checks = UserDefaults.standard.dictionary(forKey: "nsm_site_motion_checked") as? [String: Double] ?? [:]
+        var checks = UserDefaults.standard.dictionary(forKey: "nsm_site_motion_checked_v2") as? [String: Double] ?? [:]
         checks[key] = Date().timeIntervalSince1970
-        UserDefaults.standard.set(checks, forKey: "nsm_site_motion_checked")
+        UserDefaults.standard.set(checks, forKey: "nsm_site_motion_checked_v2")
     }
 
     static func looseAlbum(_ text: String) -> String {

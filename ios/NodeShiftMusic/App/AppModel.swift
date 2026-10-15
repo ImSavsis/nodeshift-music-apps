@@ -18,6 +18,7 @@ final class AppModel {
     private let presence = PresenceReporter()
     let demo: Bool
     private var nowPlaying: NowPlayingController?
+    private var audioWatcher: AudioSessionWatcher?
     private var engine: PlaybackEngine?
 
     static var isTestHost: Bool {
@@ -69,6 +70,10 @@ final class AppModel {
         room = roomStore
         roomStore.attach(player: play, catalog: cat, toasts: toast)
         presence.attach(player: play, site: siteSession)
+        let reporter = presence
+        siteSession.onWillLogout = {
+            reporter.stopNow()
+        }
         cat.attach(library: lib, site: siteSession, toasts: toast)
         siteSession.onSessionChanged = {
             Task { await cat.refreshLikes() }
@@ -76,6 +81,7 @@ final class AppModel {
 
         lyr.database = db
         play.attach(playback)
+        audioWatcher = AudioSessionWatcher(player: play)
         lib.attach(db)
         nowPlaying = NowPlayingController(player: play)
         play.onTrackStarted = { track in
@@ -92,11 +98,17 @@ final class AppModel {
             real.onError = { message in
                 toast.show("Не удалось воспроизвести: \(message)")
             }
+            real.onRouteLost = { [weak play] in
+                play?.pause()
+            }
         }
         if !demo {
             let remote = RemoteEngine()
             remote.onError = { message in
                 toast.show("Не удалось воспроизвести: \(message)")
+            }
+            remote.onRouteLost = { [weak play] in
+                play?.pause()
             }
             play.attachRemote(remote)
         }

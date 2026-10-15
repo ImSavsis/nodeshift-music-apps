@@ -21,20 +21,42 @@ final class SiteSession {
     @ObservationIgnored private let presentation = AuthPresentation()
     @ObservationIgnored private var webSession: ASWebAuthenticationSession?
     @ObservationIgnored var onSessionChanged: (() -> Void)?
+    @ObservationIgnored var onWillLogout: (() -> Void)?
+    @ObservationIgnored private var expiryObserver: NSObjectProtocol?
+
+    init() {
+        expiryObserver = NotificationCenter.default.addObserver(forName: .nsmSessionExpired, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.user != nil else { return }
+                self.user = nil
+                self.onSessionChanged?()
+            }
+        }
+    }
 
     var isLoggedIn: Bool {
         user != nil
     }
 
     func restore() async {
-        guard api.hasSession else { return }
-        do {
-            user = try await api.me()
-            onSessionChanged?()
-        } catch SiteError.unauthorized {
-            user = nil
-        } catch {
-            lastError = nil
+        let schedule = Backoff.standard
+        for attempt in 0..<schedule.attempts {
+            guard api.hasSession, user == nil else { return }
+            do {
+                user = try await api.me()
+                onSessionChanged?()
+                return
+            } catch SiteError.unauthorized {
+                user = nil
+                return
+            } catch {
+                guard attempt + 1 < schedule.attempts else { return }
+                do {
+                    try await Task.sleep(for: .seconds(schedule.delay(afterFailures: attempt + 1)))
+                } catch {
+                    return
+                }
+            }
         }
     }
 
@@ -67,6 +89,7 @@ final class SiteSession {
     }
 
     func logout() {
+        onWillLogout?()
         api.clear()
         user = nil
         onSessionChanged?()

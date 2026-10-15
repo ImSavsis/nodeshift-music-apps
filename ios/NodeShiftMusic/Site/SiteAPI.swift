@@ -171,6 +171,65 @@ enum SiteError: Error {
     case server(Int)
 }
 
+extension Notification.Name {
+    static let nsmSessionExpired = Notification.Name("space.nodeshift.music.session-expired")
+}
+
+struct PresencePayload: Encodable, Equatable, Sendable {
+    var stop: Bool?
+    var device: String
+    var platform: String?
+    var playing: Bool?
+    var title: String?
+    var artist: String?
+    var album: String?
+    var positionMs: Int?
+    var durationMs: Int?
+    var cover: String?
+    var siteId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case stop, device, platform, playing, title, artist, album, cover
+        case positionMs = "position_ms"
+        case durationMs = "duration_ms"
+        case siteId = "site_id"
+    }
+
+    init(_ snapshot: PresenceSnapshot) {
+        device = snapshot.device
+        platform = snapshot.platform
+        playing = snapshot.playing
+        title = snapshot.title
+        artist = snapshot.artist
+        album = snapshot.album
+        positionMs = snapshot.positionMs
+        durationMs = snapshot.durationMs
+        cover = snapshot.cover
+        siteId = snapshot.siteId
+    }
+
+    private init(stoppingDevice device: String) {
+        stop = true
+        self.device = device
+    }
+
+    static func stopping(device: String) -> PresencePayload {
+        PresencePayload(stoppingDevice: device)
+    }
+
+    func advanced(by milliseconds: Int) -> PresencePayload {
+        guard milliseconds > 0, playing == true, let position = positionMs else { return self }
+        var moved = self
+        let target = position + milliseconds
+        if let total = durationMs, total > 0 {
+            moved.positionMs = min(target, total)
+        } else {
+            moved.positionMs = target
+        }
+        return moved
+    }
+}
+
 final class SiteAPI: @unchecked Sendable {
     static let shared = SiteAPI()
 
@@ -262,6 +321,7 @@ final class SiteAPI: @unchecked Sendable {
         guard let http = response as? HTTPURLResponse else { throw SiteError.server(0) }
         if http.statusCode == 401 || http.statusCode == 400 {
             clear()
+            NotificationCenter.default.post(name: .nsmSessionExpired, object: nil)
             throw SiteError.unauthorized
         }
         guard (200..<300).contains(http.statusCode) else { throw SiteError.server(http.statusCode) }
@@ -421,41 +481,101 @@ final class SiteAPI: @unchecked Sendable {
         base.appendingPathComponent("room").appendingPathComponent(code)
     }
 
-    func publishPresence(_ body: [String: Any]) async {
-        guard hasSession else { return }
+    func publishPresence(_ payload: PresencePayload) async -> PresenceResult {
+        guard hasSession else { return .rejected }
+        let started = Date()
         var token = tokens().access
         if token == nil {
             token = try? await refreshAccess()
         }
         for attempt in 0..<2 {
-            guard let bearer = token, let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+            guard let bearer = token else { return hasSession ? .failed : .rejected }
+            let lag = Int(Date().timeIntervalSince(started) * 1000)
+            guard let body = try? JSONEncoder().encode(payload.advanced(by: lag)) else { return .rejected }
             var request = Net.request(bumpBase.appendingPathComponent("presence"))
             request.httpMethod = "POST"
             request.timeoutInterval = 10
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
-            request.httpBody = data
-            guard let (_, response) = try? await Net.session.data(for: request), let http = response as? HTTPURLResponse else { return }
+            request.httpBody = body
+            guard let (_, response) = try? await Net.session.data(for: request),
+                  let http = response as? HTTPURLResponse else { return .failed }
+            if http.statusCode == 401 {
+                guard attempt == 0 else { return .failed }
+                token = try? await refreshAccess()
+                continue
+            }
+            return PresenceResult.classify(status: http.statusCode)
+        }
+        return .failed
+    }
+
+    func stopPresenceDetached(device: String) {
+        let pair = tokens()
+        guard pair.access != nil || pair.refresh != nil,
+              let body = try? JSONEncoder().encode(PresencePayload.stopping(device: device)) else { return }
+        Task.detached {
+            await self.sendStop(body, access: pair.access, refresh: pair.refresh)
+        }
+    }
+
+    private func sendStop(_ body: Data, access: String?, refresh: String?) async {
+        var token = access
+        if token == nil, let refresh {
+            token = await accessToken(refreshedWith: refresh)
+        }
+        for attempt in 0..<2 {
+            guard let bearer = token else { return }
+            var request = Net.request(bumpBase.appendingPathComponent("presence"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 5
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+            request.httpBody = body
+            guard let (_, response) = try? await Net.session.data(for: request),
+                  let http = response as? HTTPURLResponse else { return }
+            guard http.statusCode == 401, attempt == 0, let refreshToken = refresh else { return }
+            token = await accessToken(refreshedWith: refreshToken)
+        }
+    }
+
+    private func accessToken(refreshedWith refreshToken: String) async -> String? {
+        var request = Net.request(url("/api/auth/refresh"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["refresh_token": refreshToken])
+        guard let (data, response) = try? await Net.session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else { return nil }
+        return (try? decoder().decode(SiteAccessToken.self, from: data))?.accessToken
+    }
+
+    func uploadPresenceArt(_ jpeg: Data) async -> String? {
+        guard hasSession, jpeg.count <= PresenceCoverRules.maxArtBytes else { return nil }
+        var token = tokens().access
+        if token == nil {
+            token = try? await refreshAccess()
+        }
+        for attempt in 0..<2 {
+            guard let bearer = token else { return nil }
+            var request = Net.request(bumpBase.appendingPathComponent("presence").appendingPathComponent("art"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 20
+            request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+            request.httpBody = jpeg
+            guard let (data, response) = try? await Net.session.data(for: request),
+                  let http = response as? HTTPURLResponse else { return nil }
             if http.statusCode == 401, attempt == 0 {
                 token = try? await refreshAccess()
                 continue
             }
-            return
+            guard http.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            return PresenceCoverRules.https(json["url"] as? String)
         }
-    }
-
-    func uploadPresenceArt(_ jpeg: Data) async -> String? {
-        guard hasSession, let bearer = tokens().access else { return nil }
-        var request = Net.request(bumpBase.appendingPathComponent("presence").appendingPathComponent("art"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
-        request.httpBody = jpeg
-        guard let (data, response) = try? await Net.session.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return json["url"] as? String
+        return nil
     }
 
     var bumpBase: URL {

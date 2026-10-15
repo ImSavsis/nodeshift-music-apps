@@ -395,7 +395,7 @@ final class ImportManager {
         onTrackAdded?(pending.track)
     }
 
-    static func normalizedJPEG(_ data: Data, maxSide: CGFloat = 1400) -> Data? {
+    nonisolated static func normalizedJPEG(_ data: Data, maxSide: CGFloat = 1400) -> Data? {
         guard let image = UIImage(data: data) else { return nil }
         let longest = max(image.size.width, image.size.height) * image.scale
         if longest <= maxSide, let first = data.first, first == 0xFF {
