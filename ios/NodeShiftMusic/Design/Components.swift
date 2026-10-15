@@ -42,8 +42,8 @@ struct PressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? pressedOpacity : 1)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(Motion.press, value: configuration.isPressed)
     }
 }
 
@@ -106,8 +106,7 @@ private struct GhostButtonBody: View {
             .foregroundStyle(Palette.white)
             .padding(.horizontal, s(18))
             .frame(height: s(40))
-            .background(Palette.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(Palette.line2, lineWidth: 1))
+            .glassSurface(Capsule(), interactive: true, fallback: Palette.surface, stroke: true)
             .opacity(configuration.isPressed ? 0.7 : (isEnabled ? 1 : 0.5))
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
@@ -197,8 +196,8 @@ struct Chip: View {
             .foregroundStyle(active ? Color(hex: 0x111111) : Palette.muted)
             .padding(.horizontal, s(14))
             .frame(height: s(32))
-            .background(active ? Palette.accent : Palette.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(active ? Color.clear : Palette.line2, lineWidth: 1))
+            .background(active ? Palette.accent : Color.clear, in: Capsule())
+            .glassSurface(Capsule(), interactive: true, fallback: Palette.surface, stroke: true, enabled: !active)
         }
         .buttonStyle(PressStyle())
         .animation(.easeOut(duration: 0.2), value: active)
@@ -212,6 +211,7 @@ struct IconToggle: View {
     var iconSize: CGFloat = 18
     var filled = false
     var tint: Color?
+    var glass = false
     var action: () -> Void
     @Environment(\.s) private var s
 
@@ -220,6 +220,7 @@ struct IconToggle: View {
             Icon(name: icon, size: s(iconSize), stroke: 1.8, filled: filled)
                 .foregroundStyle(tint ?? (active ? Palette.white : Palette.dim))
                 .frame(width: s(size), height: s(size))
+                .glassSurface(Circle(), interactive: true, enabled: glass)
                 .contentShape(Circle())
         }
         .buttonStyle(PressStyle(pressedOpacity: 0.6))
@@ -242,9 +243,18 @@ struct PlayCircle: View {
                     endPoint: .bottom
                 )
             )
-            Icon(name: playing ? .pause : .play, size: s(iconSize), stroke: 2, filled: true)
-                .foregroundStyle(Color(hex: 0x111111))
-                .offset(x: playing ? 0 : s(iconSize) * 0.05)
+            ZStack {
+                if playing {
+                    Icon(name: .pause, size: s(iconSize), stroke: 2, filled: true)
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                } else {
+                    Icon(name: .play, size: s(iconSize), stroke: 2, filled: true)
+                        .offset(x: s(iconSize) * 0.05)
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                }
+            }
+            .foregroundStyle(Color(hex: 0x111111))
+            .animation(Motion.spring, value: playing)
         }
         .frame(width: s(size), height: s(size))
         .shadow(color: .black.opacity(0.35), radius: s(10), y: s(5))

@@ -84,6 +84,7 @@ struct TrackCard: View {
                 }
             }
         }
+        .scrollFade()
     }
 
     private func activate() {
@@ -156,21 +157,24 @@ struct TrackRow: View {
                         catalog.toggleFavorite(track, library: library)
                     }
                 }
+                .bounceOnChange(catalog.isFavorite(track))
+                .tapFeedback(catalog.isFavorite(track))
                 IconToggle(icon: .ellipsis, size: 32, iconSize: 16) {
                     library.menuTrack = track
                 }
             }
             .padding(.horizontal, s(8))
             .padding(.vertical, s(8))
-            .background(isCurrent ? Palette.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: s(Radius.tile), style: .continuous))
+            .glassSurface(RoundedRectangle(cornerRadius: s(Radius.tile), style: .continuous), fallback: Palette.surface2, enabled: isCurrent)
             .overlay(
                 RoundedRectangle(cornerRadius: s(Radius.tile), style: .continuous)
-                    .strokeBorder(isCurrent ? Palette.line2 : Color.clear, lineWidth: 1)
+                    .strokeBorder(isCurrent && !glassActive ? Palette.line2 : Color.clear, lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle(pressedOpacity: 0.85))
         .animation(.easeOut(duration: 0.2), value: isCurrent)
+        .scrollFade()
     }
 
     private func activate() {
@@ -212,8 +216,8 @@ struct SearchField: View {
         }
         .padding(.horizontal, s(16))
         .frame(height: s(44))
-        .background(focused ? Palette.surface2 : Palette.surface, in: Capsule())
-        .overlay(Capsule().strokeBorder(focused ? Color.white.opacity(0.4) : Palette.line2, lineWidth: 1))
+        .glassSurface(Capsule(), interactive: true, fallback: focused ? Palette.surface2 : Palette.surface)
+        .overlay(Capsule().strokeBorder(focused ? Color.white.opacity(0.4) : (glassActive ? Color.clear : Palette.line2), lineWidth: 1))
         .animation(.easeOut(duration: 0.2), value: focused)
     }
 }

@@ -71,6 +71,7 @@ struct BottomBar: View {
     @Environment(\.s) private var s
     @State private var holdIndex: Int?
     @State private var barWidth: CGFloat = 0
+    @Namespace private var highlight
 
     private var itemCount: Int {
         AppTab.allCases.count + 1
@@ -94,7 +95,7 @@ struct BottomBar: View {
                     .ignoresSafeArea(edges: .bottom)
                 }
             }
-            .liquidGlass(in: Capsule())
+            .glassSurface(Capsule(), interactive: true)
             .padding(.horizontal, glass ? s(14) : 0)
     }
 
@@ -102,7 +103,7 @@ struct BottomBar: View {
         HStack(spacing: s(2)) {
             ForEach(Array(AppTab.allCases.enumerated()), id: \.element.id) { index, item in
                 barItem(icon: item.icon, title: item.title, active: tab == item && !moreActive, hovered: holdIndex == index) {
-                    withAnimation(Motion.expoOut(0.2)) {
+                    withAnimation(Motion.bar) {
                         tab = item
                     }
                 }
@@ -135,7 +136,7 @@ struct BottomBar: View {
                 }
                 .onEnded { _ in
                     if let index = holdIndex {
-                        withAnimation(Motion.expoOut(0.2)) {
+                        withAnimation(Motion.bar) {
                             if index < AppTab.allCases.count {
                                 tab = AppTab.allCases[index]
                             } else {
@@ -161,21 +162,30 @@ struct BottomBar: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, s(7))
             .padding(.horizontal, s(2))
-            .background(active || hovered ? Palette.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous)
-                    .strokeBorder(active || hovered ? Palette.line2 : Color.clear, lineWidth: 1)
-            )
-            .overlay {
+            .background {
                 if active {
-                    Color.clear.edgeRim(s(Radius.nav))
+                    highlightShape
+                } else if hovered {
+                    RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous).fill(Palette.surface2)
                 }
             }
             .scaleEffect(hovered ? 1.14 : 1)
             .animation(Motion.spring, value: hovered)
         }
         .buttonStyle(PressStyle(pressedOpacity: 0.7))
-        .animation(Motion.expoOut(0.2), value: active)
+        .animation(Motion.bar, value: active)
+    }
+
+    private var highlightShape: some View {
+        let shape = RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous)
+        return Color.clear
+            .glassSurface(shape, interactive: true, tint: Palette.accent.opacity(0.22), fallback: Palette.surface2, stroke: true)
+            .overlay {
+                if !glassActive {
+                    Color.clear.edgeRim(s(Radius.nav))
+                }
+            }
+            .matchedGeometryEffect(id: "bar-highlight", in: highlight)
     }
 }
 
@@ -216,6 +226,7 @@ struct MiniPlayer: View {
                     PlayCircle(size: 44, playing: player.isPlaying, iconSize: 18)
                 }
                 .buttonStyle(PressStyle(pressedOpacity: 0.9))
+                .tapFeedback(player.isPlaying)
                 Button {
                     player.next()
                 } label: {
@@ -234,7 +245,7 @@ struct MiniPlayer: View {
                     Rectangle().fill(.ultraThinMaterial)
                 }
             }
-            .liquidGlass(in: RoundedRectangle(cornerRadius: s(Radius.card), style: .continuous))
+            .glassSurface(RoundedRectangle(cornerRadius: s(Radius.card), style: .continuous), interactive: true)
             .overlay(alignment: .top) {
                 TimelineView(.animation(minimumInterval: 0.25, paused: !player.isPlaying)) { context in
                     let total = player.duration
@@ -343,8 +354,13 @@ struct MoreSheet: View {
             .padding(.horizontal, s(12))
             .padding(.bottom, s(8))
             .frame(maxWidth: .infinity)
-            .background(Palette.sheet)
-            .background(.ultraThinMaterial)
+            .background(glassActive ? Color.clear : Palette.sheet)
+            .background {
+                if !glassActive {
+                    Rectangle().fill(.ultraThinMaterial)
+                }
+            }
+            .glassSurface(UnevenRoundedRectangle(topLeadingRadius: s(Radius.card), topTrailingRadius: s(Radius.card)))
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: s(Radius.card), topTrailingRadius: s(Radius.card)))
             .overlay(alignment: .top) {
                 UnevenRoundedRectangle(topLeadingRadius: s(Radius.card), topTrailingRadius: s(Radius.card))

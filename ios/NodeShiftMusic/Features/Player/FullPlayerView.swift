@@ -219,6 +219,7 @@ struct FullPlayerView: View {
             Spacer(minLength: 0)
             CoverArt(coverName: track?.coverName, motionName: track?.motionName, radius: Radius.card, maxPixel: 1000)
                 .frame(width: side, height: side)
+                .tiltParallax(depth: s(5), degrees: 6)
                 .scaleEffect(player.isPlaying ? 1 : 0.92)
                 .animation(Motion.coverSpring, value: player.isPlaying)
                 .shadow(color: .black.opacity(0.55), radius: s(40), y: s(30))
@@ -321,72 +322,82 @@ struct FullPlayerView: View {
     }
 
     private var transport: some View {
-        HStack {
-            IconToggle(icon: .shuffle, active: player.shuffle, size: 44, iconSize: 19) {
-                player.toggleShuffle()
-            }
-            Spacer()
-            IconToggle(icon: .skipBack, active: true, size: 48, iconSize: 24, filled: true) {
-                player.previous()
-            }
-            Spacer()
-            Button {
-                player.togglePlay()
-            } label: {
-                PlayCircle(size: 64, playing: player.isPlaying, iconSize: 26)
-            }
-            .buttonStyle(PressStyle(pressedOpacity: 0.95))
-            Spacer()
-            IconToggle(icon: .skipForward, active: true, size: 48, iconSize: 24, filled: true) {
-                player.next()
-            }
-            Spacer()
-            IconToggle(icon: player.repeatMode == .one ? .repeat1 : .repeatAll, active: player.repeatMode != .off, size: 44, iconSize: 19) {
-                player.cycleRepeat()
+        GlassGroup(spacing: s(14)) {
+            HStack {
+                IconToggle(icon: .shuffle, active: player.shuffle, size: 44, iconSize: 19, glass: true) {
+                    player.toggleShuffle()
+                }
+                Spacer()
+                IconToggle(icon: .skipBack, active: true, size: 48, iconSize: 24, filled: true, glass: true) {
+                    player.previous()
+                }
+                Spacer()
+                Button {
+                    player.togglePlay()
+                } label: {
+                    PlayCircle(size: 64, playing: player.isPlaying, iconSize: 26)
+                }
+                .buttonStyle(PressStyle(pressedOpacity: 0.95))
+                .tapFeedback(player.isPlaying)
+                Spacer()
+                IconToggle(icon: .skipForward, active: true, size: 48, iconSize: 24, filled: true, glass: true) {
+                    player.next()
+                }
+                Spacer()
+                IconToggle(icon: player.repeatMode == .one ? .repeat1 : .repeatAll, active: player.repeatMode != .off, size: 44, iconSize: 19, glass: true) {
+                    player.cycleRepeat()
+                }
             }
         }
     }
 
     private var compactTransport: some View {
-        HStack {
-            Spacer()
-            IconToggle(icon: .skipBack, active: true, size: 48, iconSize: 24, filled: true) {
-                player.previous()
+        GlassGroup(spacing: s(14)) {
+            HStack {
+                Spacer()
+                IconToggle(icon: .skipBack, active: true, size: 48, iconSize: 24, filled: true, glass: true) {
+                    player.previous()
+                }
+                Spacer()
+                Button {
+                    player.togglePlay()
+                } label: {
+                    PlayCircle(size: 56, playing: player.isPlaying, iconSize: 24)
+                }
+                .buttonStyle(PressStyle(pressedOpacity: 0.95))
+                .tapFeedback(player.isPlaying)
+                Spacer()
+                IconToggle(icon: .skipForward, active: true, size: 48, iconSize: 24, filled: true, glass: true) {
+                    player.next()
+                }
+                Spacer()
             }
-            Spacer()
-            Button {
-                player.togglePlay()
-            } label: {
-                PlayCircle(size: 56, playing: player.isPlaying, iconSize: 24)
-            }
-            .buttonStyle(PressStyle(pressedOpacity: 0.95))
-            Spacer()
-            IconToggle(icon: .skipForward, active: true, size: 48, iconSize: 24, filled: true) {
-                player.next()
-            }
-            Spacer()
         }
     }
 
     private func actions(_ track: TrackRecord?) -> some View {
-        HStack(spacing: s(28)) {
-            if let track {
-                IconToggle(icon: .heart, active: catalog.isFavorite(track), size: 40, iconSize: 19, filled: catalog.isFavorite(track)) {
-                    withAnimation(Motion.spring) {
-                        catalog.toggleFavorite(track, library: library)
-                        if !track.isRemote, let updated = library.track(id: track.id) {
-                            player.updateTrack(updated)
+        GlassGroup(spacing: s(14)) {
+            HStack(spacing: s(22)) {
+                if let track {
+                    IconToggle(icon: .heart, active: catalog.isFavorite(track), size: 42, iconSize: 19, filled: catalog.isFavorite(track), glass: true) {
+                        withAnimation(Motion.spring) {
+                            catalog.toggleFavorite(track, library: library)
+                            if !track.isRemote, let updated = library.track(id: track.id) {
+                                player.updateTrack(updated)
+                            }
                         }
                     }
-                }
-                IconToggle(icon: .listPlus, size: 40, iconSize: 19) {
-                    library.playlistTrack = track
-                }
-                IconToggle(icon: .users, size: 40, iconSize: 19) {
-                    openOverlay(.together)
-                }
-                IconToggle(icon: .ellipsis, size: 40, iconSize: 19) {
-                    library.menuTrack = track
+                    .bounceOnChange(catalog.isFavorite(track))
+                    .tapFeedback(catalog.isFavorite(track))
+                    IconToggle(icon: .listPlus, size: 42, iconSize: 19, glass: true) {
+                        library.playlistTrack = track
+                    }
+                    IconToggle(icon: .users, size: 42, iconSize: 19, glass: true) {
+                        openOverlay(.together)
+                    }
+                    IconToggle(icon: .ellipsis, size: 42, iconSize: 19, glass: true) {
+                        library.menuTrack = track
+                    }
                 }
             }
         }

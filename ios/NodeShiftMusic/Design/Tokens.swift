@@ -91,6 +91,8 @@ enum Motion {
     static let spring = Animation.spring(response: 0.281, dampingFraction: 0.56)
     static let coverSpring = Animation.spring(response: 0.424, dampingFraction: 0.742)
     static let page = Animation.easeOut(duration: 0.28)
+    static let bar = Animation.spring(response: 0.38, dampingFraction: 0.78)
+    static let press = Animation.spring(response: 0.25, dampingFraction: 0.62)
 }
 
 enum Accent: String, CaseIterable, Sendable {
