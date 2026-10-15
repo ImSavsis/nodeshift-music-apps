@@ -44,4 +44,20 @@ object Prefs {
         value.forEach { (name, number) -> json.put(name, number) }
         store.edit().putString(key, json.toString()).apply()
     }
+
+    fun stringMap(key: String): Map<String, String> {
+        val raw = store.getString(key, null) ?: return emptyMap()
+        return try {
+            val json = JSONObject(raw)
+            json.keys().asSequence().associateWith { json.getString(it) }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun putStringMap(key: String, value: Map<String, String>) {
+        val json = JSONObject()
+        value.forEach { (name, text) -> json.put(name, text) }
+        store.edit().putString(key, json.toString()).apply()
+    }
 }

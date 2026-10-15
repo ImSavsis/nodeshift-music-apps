@@ -16,13 +16,16 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import space.nodeshift.music.data.AppPaths
 import space.nodeshift.music.data.LibraryStore
 import space.nodeshift.music.data.TrackRecord
 import space.nodeshift.music.design.CoverSource
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
+import kotlin.math.min
 
 enum class RepeatMode {
     Off,
@@ -52,6 +55,10 @@ class PlayerStore(
     var currentIndex by mutableIntStateOf(-1)
         private set
     var isPlaying by mutableStateOf(false)
+        private set
+    var listening by mutableStateOf(false)
+        private set
+    var audible by mutableStateOf(false)
         private set
     var duration by mutableDoubleStateOf(0.0)
         private set
@@ -108,10 +115,30 @@ class PlayerStore(
         }
     }
 
-    fun connect() {
+    private val lifecycle = object : MediaController.Listener {
+        override fun onDisconnected(controller: MediaController) {
+            if (this@PlayerStore.controller !== controller) return
+            this@PlayerStore.controller = null
+            resetState()
+            scope.launch {
+                delay(RECONNECT_BASE_MS)
+                connect()
+            }
+        }
+    }
+
+    fun connect(attempt: Int = 0) {
         scope.launch {
             val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-            val connected = MediaController.Builder(context, token).buildAsync().await()
+            val connected = try {
+                MediaController.Builder(context, token).setListener(lifecycle).buildAsync().await()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                delay(min(RECONNECT_LIMIT_MS, RECONNECT_BASE_MS shl min(attempt, 4)))
+                connect(attempt + 1)
+                return@launch
+            }
             controller = connected
             connected.addListener(listener)
             sync(connected, true)
@@ -120,12 +147,26 @@ class PlayerStore(
         }
     }
 
+    private fun resetState() {
+        queueIds = emptyList()
+        currentIndex = -1
+        isPlaying = false
+        listening = false
+        audible = false
+        duration = 0.0
+    }
+
     private fun sync(player: Player, refreshQueue: Boolean) {
         if (refreshQueue) {
             queueIds = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
         }
         currentIndex = if (player.mediaItemCount == 0) -1 else player.currentMediaItemIndex
         isPlaying = player.playWhenReady && player.playbackState != Player.STATE_ENDED && player.mediaItemCount > 0
+        listening = player.mediaItemCount > 0 &&
+            player.playWhenReady &&
+            player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE &&
+            (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
+        audible = player.isPlaying
         shuffle = player.shuffleModeEnabled
         repeatMode = when (player.repeatMode) {
             Player.REPEAT_MODE_ALL -> RepeatMode.All
@@ -146,6 +187,8 @@ class PlayerStore(
     }
 
     fun time(): Double = (controller?.currentPosition ?: 0L) / 1000.0
+
+    fun positionMs(): Long = max(0L, controller?.currentPosition ?: 0L)
 
     private fun mediaItem(track: TrackRecord): MediaItem {
         val streamUrl = track.streamUrl
@@ -290,5 +333,10 @@ class PlayerStore(
             it.seekToDefaultPosition(index)
             it.play()
         }
+    }
+
+    private companion object {
+        const val RECONNECT_BASE_MS = 2_000L
+        const val RECONNECT_LIMIT_MS = 30_000L
     }
 }

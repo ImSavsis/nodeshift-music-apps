@@ -125,7 +125,7 @@ fun StorageScreen(onClose: () -> Unit) {
                                 color = Palette.white,
                             )
                             NText("Плейлисты и лайки с сайта можно скачать на телефон.", Face.InterRegular, 13f, color = Palette.muted)
-                            GhostButton("Выйти", icon = LucideName.LogOut) { site.logout() }
+                            GhostButton("Выйти", icon = LucideName.LogOut) { scope.launch { site.logout() } }
                         } else {
                             NText(
                                 "Войди через NodeShift SSO, чтобы скачать свои плейлисты и лайки с music.nodeshift.space.",
@@ -184,6 +184,23 @@ fun StorageScreen(onClose: () -> Unit) {
                             } else {
                                 "AAC 192 кбит/с для FLAC и WAV: стартует сразу и весит в 5–6 раз меньше."
                             },
+                            Face.InterRegular,
+                            12.5f,
+                            color = Palette.dim,
+                        )
+                    }
+                }
+            }
+            Box(Modifier.padding(bottom = s(14)).reveal(4)) {
+                SurfaceCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(s(10))) {
+                        Eyebrow("Discord", bottom = 0f)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(s(8)), verticalArrangement = Arrangement.spacedBy(s(8))) {
+                            Chip("Показывать в Discord", sync.discordPresence) { sync.applyDiscordPresence(true) }
+                            Chip("Выключено", !sync.discordPresence) { sync.applyDiscordPresence(false) }
+                        }
+                        NText(
+                            "Что ты слушаешь, с обложкой. Появится в Discord на компьютере, где запущено NS Music для Windows",
                             Face.InterRegular,
                             12.5f,
                             color = Palette.dim,

@@ -170,7 +170,7 @@ fun NsmRoot(activity: MainActivity) {
                 when (item) {
                     MoreItem.Storage -> showStorage = true
                     MoreItem.Together -> showTogether = true
-                    MoreItem.Login -> if (site.isLoggedIn) site.logout() else scope.launch { site.login(activity) }
+                    MoreItem.Login -> scope.launch { if (site.isLoggedIn) site.logout() else site.login(activity) }
                     else -> graph.toasts.show("${item.title} скоро будет")
                 }
             }

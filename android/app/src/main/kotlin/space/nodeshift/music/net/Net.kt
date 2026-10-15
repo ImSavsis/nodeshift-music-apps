@@ -102,6 +102,18 @@ object Net {
 
     suspend fun execute(request: Request): Response = client.newCall(request).await()
 
+    suspend fun executeWithin(request: Request, seconds: Long): Response =
+        client.newBuilder().callTimeout(seconds, TimeUnit.SECONDS).build().newCall(request).await()
+
+    suspend fun <T> exchange(request: Request, seconds: Long, read: (Response) -> T): T {
+        val response = executeWithin(request, seconds)
+        try {
+            return withContext(Dispatchers.IO) { response.use(read) }
+        } finally {
+            response.close()
+        }
+    }
+
     suspend fun bytes(url: String, headers: Map<String, String> = emptyMap(), agent: String = USER_AGENT): ByteArray {
         execute(request(url, headers, agent).build()).use { response ->
             if (!response.isSuccessful) throw NetException(response.code)

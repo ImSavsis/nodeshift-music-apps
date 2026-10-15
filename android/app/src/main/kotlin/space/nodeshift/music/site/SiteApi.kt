@@ -19,6 +19,8 @@ import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import space.nodeshift.music.core.PresenceOutcome
+import space.nodeshift.music.core.PresencePolicy
 import space.nodeshift.music.data.Prefs
 import space.nodeshift.music.net.Net
 import space.nodeshift.music.net.NetException
@@ -27,6 +29,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import kotlin.coroutines.cancellation.CancellationException
 
 object SecureStore {
     private const val ALIAS = "nsm_tokens"
@@ -161,6 +164,8 @@ object SiteApi {
     private var access: String? = null
     private var refresh: String? = null
 
+    var onExpired: (() -> Unit)? = null
+
     fun load() {
         access = SecureStore.get("access")
         refresh = SecureStore.get("refresh")
@@ -209,6 +214,7 @@ object SiteApi {
         Net.execute(Net.postJson("$BASE/api/auth/refresh", body.toString())).use { response ->
             if (response.code == 401 || response.code == 400) {
                 clear()
+                onExpired?.invoke()
                 throw SiteException(SiteException.Kind.Unauthorized)
             }
             if (!response.isSuccessful) throw SiteException(SiteException.Kind.Server, response.code)
@@ -322,31 +328,60 @@ object SiteApi {
 
     const val BUMP = "$BASE/app/bump"
 
-    suspend fun publishPresence(body: org.json.JSONObject) {
-        if (!hasSession) return
-        runCatching {
+    private const val PRESENCE_TIMEOUT_SECONDS = 10L
+    private const val ART_TIMEOUT_SECONDS = 30L
+
+    suspend fun publishPresence(build: () -> org.json.JSONObject?): PresenceOutcome {
+        if (!hasSession) return PresenceOutcome.Rejected
+        return try {
             var token = access ?: refreshAccess()
+            var code = 0
             for (attempt in 0 until 2) {
+                val body = build() ?: return PresenceOutcome.Rejected
                 val request = Net.postJson("$BUMP/presence", body.toString(), mapOf("Authorization" to "Bearer $token"))
-                val code = Net.execute(request).use { it.code }
+                code = Net.exchange(request, PRESENCE_TIMEOUT_SECONDS) { it.code }
                 if (code == 401 && attempt == 0) {
                     token = refreshAccess()
                     continue
                 }
                 break
             }
+            PresencePolicy.outcomeFor(code)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: SiteException) {
+            if (error.kind == SiteException.Kind.Unauthorized || error.kind == SiteException.Kind.NoToken) {
+                PresenceOutcome.Rejected
+            } else {
+                PresenceOutcome.Retry
+            }
+        } catch (_: Exception) {
+            PresenceOutcome.Retry
         }
     }
 
     suspend fun uploadPresenceArt(jpeg: ByteArray): String? {
-        val token = access ?: return null
+        if (!hasSession) return null
         return try {
-            val request = Net.request("$BUMP/presence/art", mapOf("Authorization" to "Bearer $token"))
-                .post(jpeg.toRequestBody("image/jpeg".toMediaType()))
-                .build()
-            Net.execute(request).use { response ->
-                if (!response.isSuccessful) null else org.json.JSONObject(response.body.string()).optString("url").ifEmpty { null }
+            var token = access ?: refreshAccess()
+            var url: String? = null
+            for (attempt in 0 until 2) {
+                val request = Net.request("$BUMP/presence/art", mapOf("Authorization" to "Bearer $token"))
+                    .post(jpeg.toRequestBody("image/jpeg".toMediaType()))
+                    .build()
+                val outcome = Net.exchange(request, ART_TIMEOUT_SECONDS) { response ->
+                    response.code to (if (response.isSuccessful) response.body.string() else null)
+                }
+                if (outcome.first == 401 && attempt == 0) {
+                    token = refreshAccess()
+                    continue
+                }
+                url = outcome.second?.let { org.json.JSONObject(it).optString("url").ifEmpty { null } }
+                break
             }
+            url
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
             null
         }

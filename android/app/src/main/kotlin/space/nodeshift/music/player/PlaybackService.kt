@@ -9,6 +9,7 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import space.nodeshift.music.MainActivity
+import space.nodeshift.music.NsmApp
 import space.nodeshift.music.R
 
 class PlaybackService : MediaSessionService() {
@@ -39,14 +40,20 @@ class PlaybackService : MediaSessionService() {
         )
     }
 
+    private fun presence() = (application as NsmApp).graph.presence
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         val player = session?.player
-        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) stopSelf()
+        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+            presence().stopNow()
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
+        presence().stopNow()
         session?.run {
             player.release()
             release()

@@ -7,8 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.min
 
 class SiteSession {
     var user by mutableStateOf<SiteUser?>(null)
@@ -22,20 +26,33 @@ class SiteSession {
     private var tabOpen = false
 
     var onSessionChanged: (() -> Unit)? = null
+    var beforeLogout: (suspend () -> Unit)? = null
 
     val isLoggedIn: Boolean
         get() = user != null
 
     suspend fun restore() {
-        if (!SiteApi.hasSession) return
-        try {
-            user = SiteApi.me()
-            onSessionChanged?.invoke()
-        } catch (error: SiteException) {
-            if (error.kind == SiteException.Kind.Unauthorized) user = null
-        } catch (_: Exception) {
-            lastError = null
+        var pause = RESTORE_FIRST_PAUSE_MS
+        while (SiteApi.hasSession && user == null) {
+            try {
+                user = SiteApi.me()
+                onSessionChanged?.invoke()
+                return
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: SiteException) {
+                if (error.kind == SiteException.Kind.Unauthorized || error.kind == SiteException.Kind.NoToken) return
+            } catch (_: Exception) {
+            }
+            delay(pause)
+            pause = min(pause * 2, RESTORE_LAST_PAUSE_MS)
         }
+    }
+
+    fun expire() {
+        if (user == null) return
+        user = null
+        onSessionChanged?.invoke()
     }
 
     suspend fun login(activity: Activity): Boolean {
@@ -88,9 +105,21 @@ class SiteSession {
         if (waiting === pending && !waiting.isCompleted) waiting.complete(null)
     }
 
-    fun logout() {
-        SiteApi.clear()
-        user = null
-        onSessionChanged?.invoke()
+    suspend fun logout() {
+        try {
+            withTimeoutOrNull(LOGOUT_GRACE_MS) { beforeLogout?.invoke() }
+        } finally {
+            withContext(NonCancellable) {
+                SiteApi.clear()
+                user = null
+                onSessionChanged?.invoke()
+            }
+        }
+    }
+
+    private companion object {
+        const val RESTORE_FIRST_PAUSE_MS = 2_000L
+        const val RESTORE_LAST_PAUSE_MS = 60_000L
+        const val LOGOUT_GRACE_MS = 3_000L
     }
 }

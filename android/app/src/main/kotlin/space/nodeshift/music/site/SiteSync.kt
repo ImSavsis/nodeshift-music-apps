@@ -51,12 +51,19 @@ class SiteSync(
         private set
     var lossless by mutableStateOf(Prefs.bool("nsm_lossless", true))
         private set
+    var discordPresence by mutableStateOf(Prefs.bool("nsm_discord_presence", true))
+        private set
 
     private var running = false
 
     fun applyLossless(value: Boolean) {
         lossless = value
         Prefs.putBool("nsm_lossless", value)
+    }
+
+    fun applyDiscordPresence(value: Boolean) {
+        discordPresence = value
+        Prefs.putBool("nsm_discord_presence", value)
     }
 
     suspend fun refresh() {

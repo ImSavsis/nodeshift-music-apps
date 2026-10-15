@@ -1,7 +1,9 @@
 package space.nodeshift.music
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,7 +25,9 @@ import space.nodeshift.music.site.UpdateChecker
 import space.nodeshift.music.ui.ToastCenter
 
 class AppGraph(app: Application) {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, error -> Log.e("NsmApp", "uncaught", error) },
+    )
     val database = AppDatabase(app)
     val library = LibraryStore(database, scope)
     val player = PlayerStore(app, library, scope)
@@ -37,7 +41,7 @@ class AppGraph(app: Application) {
     val catalog = CatalogStore(library, site, toasts, scope)
     val room = space.nodeshift.music.site.RoomStore(player, catalog, toasts, scope)
     val bump = space.nodeshift.music.site.BumpSession(app, scope)
-    private val presence = space.nodeshift.music.site.PresenceReporter(player, site, scope)
+    val presence = space.nodeshift.music.site.PresenceReporter(player, site, sync, scope)
 
     init {
         player.onTrackStarted = { track ->
@@ -50,15 +54,15 @@ class AppGraph(app: Application) {
             scope.launch { lyrics.ensure(track) }
         }
         site.onSessionChanged = { scope.launch { catalog.refreshLikes() } }
+        site.beforeLogout = { presence.retireNow() }
+        SiteApi.onExpired = { scope.launch { site.expire() } }
         player.onError = { message -> toasts.show("Не удалось воспроизвести: $message") }
         importer.onTrackRemoved = { id -> player.removeTrack(id) }
         importer.onTrackAdded = { track -> enrichment.enqueue(track) }
         player.connect()
         presence.start()
-        scope.launch {
-            site.restore()
-            updates.check()
-        }
+        scope.launch { site.restore() }
+        scope.launch { updates.check() }
     }
 }
 
