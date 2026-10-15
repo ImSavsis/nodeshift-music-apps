@@ -52,10 +52,10 @@ final class PresenceReporter {
     convenience init() {
         let device = BumpSession.deviceID
         self.init(
-            sink: HubPresenceSink(device: device),
+            sink: SwitchingPresenceSink(hub: HubPresenceSink(device: device), social: SocialPresenceSink()),
             covers: PresenceCovers(),
             deviceID: device,
-            isEnabled: { SoundSettings.shared.discordPresence && SiteAPI.shared.hasSession }
+            isEnabled: { SoundSettings.shared.discordPresence && (SiteAPI.shared.hasSession || DiscordLink.shared.isLinked) }
         )
     }
 
@@ -114,6 +114,7 @@ final class PresenceReporter {
             _ = player.seekToken
             _ = site?.isLoggedIn
             _ = SoundSettings.shared.discordPresence
+            _ = DiscordLink.shared.state
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.reconcile()

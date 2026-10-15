@@ -39,6 +39,10 @@ targets:
       - package: GRDB
       - package: ZIPFoundation
       - package: SWCompression
+      - framework: Vendor/discord/ios/discord_partner_sdk.xcframework
+        embed: true
+      - framework: Vendor/discord/ios/discord_partner_sdk_krisp.xcframework
+        embed: true
     info:
       path: NodeShiftMusic/Info.plist
       properties:
@@ -83,6 +87,11 @@ targets:
           - CFBundleURLName: space.nodeshift.music
             CFBundleURLSchemes:
               - space.nodeshift.music
+          - CFBundleURLName: space.nodeshift.music.discord
+            CFBundleURLSchemes:
+              - discord-1498024819675889704
+        LSApplicationQueriesSchemes:
+          - discord
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: space.nodeshift.music
@@ -92,6 +101,9 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: "NO"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        SWIFT_OBJC_BRIDGING_HEADER: NodeShiftMusic/Discord/NodeShiftMusic-Bridging-Header.h
+        CLANG_CXX_LANGUAGE_STANDARD: gnu++20
+        CLANG_CXX_LIBRARY: libc++
   NodeShiftMusicTests:
     type: bundle.unit-test
     platform: iOS

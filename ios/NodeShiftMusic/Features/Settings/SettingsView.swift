@@ -119,9 +119,10 @@ struct SettingsView: View {
                 )
                 SettingToggle(
                     title: "Показывать в Discord",
-                    detail: "Что ты слушаешь, с обложкой. Появится в Discord на компьютере, где запущено NS Music для Windows",
+                    detail: "Что ты слушаешь, с обложкой. Без привязки показывается в Discord на компьютере, где запущено NS Music для Windows",
                     isOn: Binding(get: { settings.discordPresence }, set: { settings.setDiscordPresence($0) })
                 )
+                DiscordLinkRow()
                 Text("Если в iPhone включён режим уменьшения движения, анимации отключаются системой.")
                     .font(.nsm(.interRegular, s(12)))
                     .foregroundStyle(Palette.dim)

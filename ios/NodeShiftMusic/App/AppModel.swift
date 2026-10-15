@@ -121,6 +121,7 @@ final class AppModel {
             }
         }
         if !demo {
+            DiscordLink.shared.restore()
             Task {
                 await siteSession.restore()
                 await updateChecker.check()
