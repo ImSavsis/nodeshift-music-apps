@@ -158,6 +158,7 @@ static std::string NSMUtf8(NSString *value) {
     NSString *album = info[@"album"];
     NSString *cover = info[@"cover"];
     NSString *page = info[@"page"];
+    NSString *pageLabel = info[@"pageLabel"];
     uint64_t start = [info[@"start"] unsignedLongLongValue];
     uint64_t end = [info[@"end"] unsignedLongLongValue];
 
@@ -172,6 +173,10 @@ static std::string NSMUtf8(NSString *value) {
     }
     if (page.length > 0) {
         activity.SetDetailsUrl(NSMUtf8(page));
+        discordpp::ActivityButton button;
+        button.SetLabel(NSMUtf8(pageLabel.length > 0 ? pageLabel : @"Открыть трек"));
+        button.SetUrl(NSMUtf8(page));
+        activity.AddButton(button);
     }
     discordpp::ActivityAssets assets;
     if (cover.length > 0) {

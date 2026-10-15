@@ -22,7 +22,9 @@ struct SocialPresenceSink: PresenceSink {
         if let cover = snapshot.cover {
             info["cover"] = cover
         }
-        info["page"] = Self.link(for: snapshot)
+        let page = Self.link(for: snapshot)
+        info["page"] = page.url
+        info["pageLabel"] = page.label
         return await withCheckedContinuation { continuation in
             NSMDiscordBridge.shared.publish(info) { ok, retryable, _ in
                 continuation.resume(returning: ok ? .sent : (retryable ? .failed : .rejected))
@@ -30,13 +32,13 @@ struct SocialPresenceSink: PresenceSink {
         }
     }
 
-    private static func link(for snapshot: PresenceSnapshot) -> String {
+    private static func link(for snapshot: PresenceSnapshot) -> (url: String, label: String) {
         if let siteId = snapshot.siteId?.replacingOccurrences(of: "site:", with: ""), !siteId.isEmpty {
-            return "https://music.nodeshift.space/track/\(siteId)"
+            return ("https://music.nodeshift.space/track/\(siteId)", "Слушать на NodeShift")
         }
         let query = String("\(snapshot.artist) \(snapshot.title)".trimmingCharacters(in: .whitespaces).prefix(60))
         let encoded = query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
-        return "https://music.apple.com/search?term=\(encoded)"
+        return ("https://music.apple.com/search?term=\(encoded)", "Найти трек в Apple Music")
     }
 
     func clear() async -> PresenceResult {
