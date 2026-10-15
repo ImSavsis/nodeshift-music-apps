@@ -11,6 +11,7 @@ use nsm_core::engine::{CatalogPage, CatalogSource, Decision, Emit, Engine, Engin
 use nsm_core::media_server::{self, MediaServer};
 use nsm_core::model::{Playlist, Track};
 use nsm_core::paths::Paths;
+use nsm_core::presence::DiscordConfig;
 use nsm_core::update::{self, UpdateManifest};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
@@ -32,6 +33,11 @@ struct AppState {
     media: MediaServer,
 }
 
+struct DiscordState {
+    base: PathBuf,
+    bridge: Option<Bridge>,
+}
+
 fn build_number() -> i64 {
     BUILD.parse().unwrap_or(0)
 }
@@ -47,6 +53,46 @@ struct AppInfo {
     build: i64,
     media_base: String,
     muted: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiscordInfo {
+    supported: bool,
+    status: &'static str,
+    label: &'static str,
+    enabled: bool,
+    app_id: String,
+    app_name: String,
+}
+
+#[tauri::command]
+fn discord_info(state: State<DiscordState>) -> DiscordInfo {
+    let config = DiscordConfig::load(&state.base);
+    let (supported, status, label) = match &state.bridge {
+        Some(bridge) => {
+            let status = bridge.status();
+            (true, status.code(), status.label())
+        }
+        None => (false, "unsupported", "Discord: недоступен"),
+    };
+    DiscordInfo { supported, status, label, enabled: config.enabled, app_id: config.app_id, app_name: config.name }
+}
+
+#[tauri::command]
+fn discord_set_enabled(state: State<DiscordState>, enabled: bool) -> Result<(), String> {
+    text(DiscordConfig::save_enabled(&state.base, enabled))?;
+    if let Some(bridge) = &state.bridge {
+        bridge.wake();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn discord_reconnect(state: State<DiscordState>) {
+    if let Some(bridge) = &state.bridge {
+        bridge.wake();
+    }
 }
 
 #[tauri::command]
@@ -454,6 +500,7 @@ pub fn run() {
 
             let first_run = apply_autostart(app.handle(), &base);
             let bridge = start_bridge(&bridge_runtime, &engine, &base);
+            app.manage(DiscordState { base: base.clone(), bridge: bridge.clone() });
             let resident = settle_in_tray(app.handle(), &base, bridge);
             app.state::<tray::TrayFlag>().set(resident);
             open_main_window(app.handle(), !(resident && started_hidden()))?;
@@ -514,6 +561,9 @@ pub fn run() {
             catalog_like,
             catalog_played,
             presence_publish,
+            discord_info,
+            discord_set_enabled,
+            discord_reconnect,
             site_lyrics_get,
             site_snapshot,
             site_login,

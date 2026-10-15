@@ -27,6 +27,17 @@ pub enum BridgeStatus {
 }
 
 impl BridgeStatus {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::NeedsLogin => "needs_login",
+            Self::HubUnreachable => "hub_unreachable",
+            Self::WaitingForDiscord => "waiting_for_discord",
+            Self::Idle => "idle",
+            Self::Showing => "showing",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Disabled => "Discord: выключен",
@@ -566,6 +577,24 @@ pub fn start_discord(runtime: &tokio::runtime::Handle, engine: Engine, base: Pat
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_codes_are_unique_and_stable() {
+        let all = [
+            BridgeStatus::Disabled,
+            BridgeStatus::NeedsLogin,
+            BridgeStatus::HubUnreachable,
+            BridgeStatus::WaitingForDiscord,
+            BridgeStatus::Idle,
+            BridgeStatus::Showing,
+        ];
+        let mut codes: Vec<&str> = all.iter().map(|status| status.code()).collect();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), all.len());
+        assert_eq!(BridgeStatus::Showing.code(), "showing");
+        assert_eq!(BridgeStatus::WaitingForDiscord.code(), "waiting_for_discord");
+    }
 
     #[test]
     fn utc_formatting() {

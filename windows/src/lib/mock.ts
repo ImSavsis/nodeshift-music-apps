@@ -583,6 +583,11 @@ async function dispatch(command: string, args: Record<string, unknown>): Promise
       return null;
     case 'set_motion_auto':
       return null;
+    case 'discord_info':
+      return { supported: true, status: 'waiting_for_discord', label: 'Discord: не найден, жду', enabled: true, appId: '1498024819675889704', appName: 'Burmalda' };
+    case 'discord_set_enabled':
+    case 'discord_reconnect':
+      return null;
     case 'update_check': {
       const manifest: UpdateManifest | null = window.location.search.includes('update')
         ? { platform: 'win', version: '0.2.0', build: 9, file: 'NodeShiftMusic-Setup.exe', size: 28_400_000, sha256: '', notes: 'Новая версия с анимированными обложками', builtAt: null, available: true }

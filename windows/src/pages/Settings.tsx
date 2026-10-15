@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Download, Keyboard, RefreshCw } from 'lucide-react';
+import { DiscordCard } from '../components/DiscordCard';
 import { api } from '../lib/api';
 import { readFlag, writeFlag } from '../lib/flags';
 import { formatBytes, formatTotalDuration, pluralTracks } from '../lib/format';
@@ -58,6 +59,8 @@ export function Settings() {
         </span>
         <input type="checkbox" checked={motionAuto} onChange={(event) => changeMotion(event.target.checked)} className="h-5 w-5 accent-white" />
       </label>
+
+      <DiscordCard />
 
       <h2 className="eyebrow mt-8">Приложение</h2>
       <div className="card static flex flex-col gap-4 !p-4">
