@@ -54,6 +54,8 @@ final class NetworkMonitor: @unchecked Sendable {
     private var unmetered = true
 
     private init() {
+        accent = Accent(rawValue: UserDefaults.standard.string(forKey: "nsm_accent") ?? "") ?? .silver
+        liquidGlass = UserDefaults.standard.object(forKey: "nsm_liquid_glass") as? Bool ?? true
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
             self.lock.lock()
@@ -80,6 +82,8 @@ final class SoundSettings {
     private(set) var motionCovers: Bool
     private(set) var ambientMotion: Bool
     private(set) var discordPresence: Bool
+    private(set) var accent: Accent
+    private(set) var liquidGlass: Bool
 
     private init() {
         discordPresence = UserDefaults.standard.object(forKey: "nsm_discord_presence") as? Bool ?? true
@@ -109,6 +113,16 @@ final class SoundSettings {
     func setAmbientMotion(_ value: Bool) {
         ambientMotion = value
         UserDefaults.standard.set(value, forKey: "nsm_ambient_motion")
+    }
+
+    func setAccent(_ value: Accent) {
+        accent = value
+        UserDefaults.standard.set(value.rawValue, forKey: "nsm_accent")
+    }
+
+    func setLiquidGlass(_ value: Bool) {
+        liquidGlass = value
+        UserDefaults.standard.set(value, forKey: "nsm_liquid_glass")
     }
 
     func setDiscordPresence(_ value: Bool) {

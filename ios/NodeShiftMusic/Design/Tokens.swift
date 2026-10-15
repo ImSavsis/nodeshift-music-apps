@@ -92,3 +92,67 @@ enum Motion {
     static let coverSpring = Animation.spring(response: 0.424, dampingFraction: 0.742)
     static let page = Animation.easeOut(duration: 0.28)
 }
+
+enum Accent: String, CaseIterable, Sendable {
+    case silver
+    case blue
+    case violet
+    case pink
+    case red
+    case orange
+    case yellow
+    case green
+    case mint
+    case cyan
+
+    var title: String {
+        switch self {
+        case .silver: return "Серебро"
+        case .blue: return "Синий"
+        case .violet: return "Фиолетовый"
+        case .pink: return "Розовый"
+        case .red: return "Красный"
+        case .orange: return "Оранжевый"
+        case .yellow: return "Жёлтый"
+        case .green: return "Зелёный"
+        case .mint: return "Мята"
+        case .cyan: return "Голубой"
+        }
+    }
+
+    var top: Color {
+        switch self {
+        case .silver: return Color(hex: 0xF4F4F6)
+        case .blue: return Color(hex: 0x8CC2FF)
+        case .violet: return Color(hex: 0xC2A8FF)
+        case .pink: return Color(hex: 0xFFA8D0)
+        case .red: return Color(hex: 0xFF938A)
+        case .orange: return Color(hex: 0xFFC27A)
+        case .yellow: return Color(hex: 0xFFE98A)
+        case .green: return Color(hex: 0x95EAA4)
+        case .mint: return Color(hex: 0x96F2DC)
+        case .cyan: return Color(hex: 0x96E9FF)
+        }
+    }
+
+    var bottom: Color {
+        switch self {
+        case .silver: return Color(hex: 0xCFCFD6)
+        case .blue: return Color(hex: 0x4A86FF)
+        case .violet: return Color(hex: 0x8656FF)
+        case .pink: return Color(hex: 0xFF5BA3)
+        case .red: return Color(hex: 0xEA4540)
+        case .orange: return Color(hex: 0xFF8226)
+        case .yellow: return Color(hex: 0xF7C21A)
+        case .green: return Color(hex: 0x36BC5C)
+        case .mint: return Color(hex: 0x27C6A8)
+        case .cyan: return Color(hex: 0x1EADEB)
+        }
+    }
+}
+
+extension Palette {
+    @MainActor static var accent: Color { SoundSettings.shared.accent.top }
+    @MainActor static var accentTop: Color { SoundSettings.shared.accent.top }
+    @MainActor static var accentBottom: Color { SoundSettings.shared.accent.bottom }
+}

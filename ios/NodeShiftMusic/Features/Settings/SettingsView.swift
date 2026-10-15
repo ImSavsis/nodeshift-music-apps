@@ -43,6 +43,7 @@ struct SettingsView: View {
                 accountCard.reveal(1)
                 soundCard.reveal(2)
                 motionCard.reveal(3)
+                appearanceCard.reveal(3)
                 libraryCard.reveal(4)
                 roomCard.reveal(4)
                 aboutCard.reveal(4)
@@ -122,6 +123,49 @@ struct SettingsView: View {
                     isOn: Binding(get: { settings.discordPresence }, set: { settings.setDiscordPresence($0) })
                 )
                 Text("Если в iPhone включён режим уменьшения движения, анимации отключаются системой.")
+                    .font(.nsm(.interRegular, s(12)))
+                    .foregroundStyle(Palette.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.bottom, s(14))
+    }
+
+    private var appearanceCard: some View {
+        let settings = SoundSettings.shared
+        return SurfaceCard {
+            VStack(alignment: .leading, spacing: s(14)) {
+                Eyebrow(text: "Оформление", bottom: 0)
+                SettingToggle(
+                    title: "Жидкое стекло",
+                    detail: "Стеклянная нижняя панель и мини-плеер в стиле iOS 26. На старых версиях iOS остаётся обычное размытие",
+                    isOn: Binding(get: { settings.liquidGlass }, set: { settings.setLiquidGlass($0) })
+                )
+                Text("Цвет интерфейса")
+                    .font(.nsm(.interMedium, s(14)))
+                    .foregroundStyle(Palette.white)
+                FlowLayout(spacing: s(12), lineSpacing: s(12)) {
+                    ForEach(Accent.allCases, id: \.self) { item in
+                        Button {
+                            withAnimation(Motion.expoOut(0.25)) {
+                                settings.setAccent(item)
+                            }
+                        } label: {
+                            Circle()
+                                .fill(LinearGradient(colors: [item.top, item.bottom], startPoint: .top, endPoint: .bottom))
+                                .frame(width: s(36), height: s(36))
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(Color.white, lineWidth: settings.accent == item ? 2.5 : 0)
+                                        .padding(-s(4))
+                                )
+                                .padding(s(4))
+                        }
+                        .buttonStyle(PressStyle(pressedOpacity: 0.8))
+                        .accessibilityLabel(item.title)
+                    }
+                }
+                Text("Удерживай панель внизу и веди пальцем, чтобы переключать вкладки. Свайп влево-вправо листает вкладки, а в плеере треки.")
                     .font(.nsm(.interRegular, s(12)))
                     .foregroundStyle(Palette.dim)
                     .fixedSize(horizontal: false, vertical: true)

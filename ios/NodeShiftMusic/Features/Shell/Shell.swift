@@ -69,34 +69,86 @@ struct BottomBar: View {
     var moreActive: Bool
     var onMore: () -> Void
     @Environment(\.s) private var s
+    @State private var holdIndex: Int?
+    @State private var barWidth: CGFloat = 0
+
+    private var itemCount: Int {
+        AppTab.allCases.count + 1
+    }
 
     var body: some View {
+        let glass = glassActive
+        row
+            .padding(.horizontal, s(8))
+            .padding(.top, s(6))
+            .padding(.bottom, s(4))
+            .background(alignment: .top) {
+                if !glass {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Palette.bg.opacity(0.55)
+                    }
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(Palette.line2).frame(height: 1)
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                }
+            }
+            .liquidGlass(in: Capsule())
+            .padding(.horizontal, glass ? s(14) : 0)
+    }
+
+    private var row: some View {
         HStack(spacing: s(2)) {
-            ForEach(AppTab.allCases) { item in
-                barItem(icon: item.icon, title: item.title, active: tab == item && !moreActive) {
+            ForEach(Array(AppTab.allCases.enumerated()), id: \.element.id) { index, item in
+                barItem(icon: item.icon, title: item.title, active: tab == item && !moreActive, hovered: holdIndex == index) {
                     withAnimation(Motion.expoOut(0.2)) {
                         tab = item
                     }
                 }
             }
-            barItem(icon: .ellipsis, title: "Ещё", active: moreActive, action: onMore)
+            barItem(icon: .ellipsis, title: "Ещё", active: moreActive, hovered: holdIndex == AppTab.allCases.count, action: onMore)
         }
-        .padding(.horizontal, s(8))
-        .padding(.top, s(6))
-        .padding(.bottom, s(4))
-        .background(alignment: .top) {
-            ZStack {
-                Rectangle().fill(.ultraThinMaterial)
-                Palette.bg.opacity(0.55)
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        barWidth = proxy.size.width
+                    }
+                    .onChange(of: proxy.size.width) { _, width in
+                        barWidth = width
+                    }
             }
-            .overlay(alignment: .top) {
-                Rectangle().fill(Palette.line2).frame(height: 1)
-            }
-            .ignoresSafeArea(edges: .bottom)
-        }
+        )
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.25)
+                .sequenced(before: DragGesture(minimumDistance: 0))
+                .onChanged { value in
+                    if case let .second(true, drag?) = value {
+                        let raw = Int(drag.location.x / max(barWidth, 1) * CGFloat(itemCount))
+                        let index = min(itemCount - 1, max(0, raw))
+                        if holdIndex != index {
+                            holdIndex = index
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                    }
+                }
+                .onEnded { _ in
+                    if let index = holdIndex {
+                        withAnimation(Motion.expoOut(0.2)) {
+                            if index < AppTab.allCases.count {
+                                tab = AppTab.allCases[index]
+                            } else {
+                                onMore()
+                            }
+                        }
+                    }
+                    holdIndex = nil
+                }
+        )
     }
 
-    private func barItem(icon: LucideName, title: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private func barItem(icon: LucideName, title: String, active: Bool, hovered: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: s(3)) {
                 Icon(name: icon, size: s(18), stroke: 1.6)
@@ -105,20 +157,22 @@ struct BottomBar: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(active ? Palette.white : Palette.dim)
+            .foregroundStyle(active || hovered ? Palette.accent : Palette.dim)
             .frame(maxWidth: .infinity)
             .padding(.vertical, s(7))
             .padding(.horizontal, s(2))
-            .background(active ? Palette.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous))
+            .background(active || hovered ? Palette.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: s(Radius.nav), style: .continuous)
-                    .strokeBorder(active ? Palette.line2 : Color.clear, lineWidth: 1)
+                    .strokeBorder(active || hovered ? Palette.line2 : Color.clear, lineWidth: 1)
             )
             .overlay {
                 if active {
                     Color.clear.edgeRim(s(Radius.nav))
                 }
             }
+            .scaleEffect(hovered ? 1.14 : 1)
+            .animation(Motion.spring, value: hovered)
         }
         .buttonStyle(PressStyle(pressedOpacity: 0.7))
         .animation(Motion.expoOut(0.2), value: active)
@@ -174,8 +228,13 @@ struct MiniPlayer: View {
             }
             .padding(.horizontal, s(8))
             .padding(.vertical, s(8))
-            .background(Palette.playerBar)
-            .background(.ultraThinMaterial)
+            .background(glassActive ? Color.clear : Palette.playerBar)
+            .background {
+                if !glassActive {
+                    Rectangle().fill(.ultraThinMaterial)
+                }
+            }
+            .liquidGlass(in: RoundedRectangle(cornerRadius: s(Radius.card), style: .continuous))
             .overlay(alignment: .top) {
                 TimelineView(.animation(minimumInterval: 0.25, paused: !player.isPlaying)) { context in
                     let total = player.duration

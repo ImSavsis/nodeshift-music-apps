@@ -17,6 +17,7 @@ struct RootView: View {
                 FlowFieldView()
                     .ignoresSafeArea()
                 page
+                    .simultaneousGesture(tabSwipe)
                     .id(tab)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .offset(y: 12)),
@@ -170,6 +171,23 @@ struct RootView: View {
                 }
             }
         }
+    }
+
+    private var tabSwipe: some Gesture {
+        DragGesture(minimumDistance: 40)
+            .onEnded { value in
+                let dx = value.translation.width
+                let dy = value.translation.height
+                guard abs(dx) > 90, abs(dx) > abs(dy) * 1.6 else { return }
+                let tabs = AppTab.allCases
+                guard let index = tabs.firstIndex(of: tab) else { return }
+                let next = dx < 0 ? index + 1 : index - 1
+                guard tabs.indices.contains(next) else { return }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(Motion.page) {
+                    tab = tabs[next]
+                }
+            }
     }
 
     @ViewBuilder

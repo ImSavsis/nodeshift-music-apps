@@ -100,6 +100,20 @@ struct FullPlayerView: View {
             }
             .transition(.opacity)
             .animation(Motion.opacity, value: tab)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 40)
+                    .onEnded { value in
+                        guard tab == .player, value.startLocation.y < proxy.size.height * 0.6 else { return }
+                        let dx = value.translation.width
+                        guard abs(dx) > 80, abs(dx) > abs(value.translation.height) * 1.5 else { return }
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        if dx < 0 {
+                            player.next()
+                        } else {
+                            player.previous()
+                        }
+                    }
+            )
         }
     }
 

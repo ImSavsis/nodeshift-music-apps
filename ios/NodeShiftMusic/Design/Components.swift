@@ -67,7 +67,7 @@ private struct PrimaryButtonBody: View {
             .background(
                 Capsule().fill(
                     LinearGradient(
-                        colors: [Color(hex: 0xF4F4F6), Color(hex: 0xCFCFD6)],
+                        colors: [Palette.accentTop, Palette.accentBottom],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -197,7 +197,7 @@ struct Chip: View {
             .foregroundStyle(active ? Color(hex: 0x111111) : Palette.muted)
             .padding(.horizontal, s(14))
             .frame(height: s(32))
-            .background(active ? Color.white : Palette.surface, in: Capsule())
+            .background(active ? Palette.accent : Palette.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(active ? Color.clear : Palette.line2, lineWidth: 1))
         }
         .buttonStyle(PressStyle())
@@ -237,7 +237,7 @@ struct PlayCircle: View {
         ZStack {
             Circle().fill(
                 LinearGradient(
-                    colors: [Color(hex: 0xF4F4F6), Color(hex: 0xCFCFD6)],
+                    colors: [Palette.accentTop, Palette.accentBottom],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -308,7 +308,7 @@ struct EqualizerBars: View {
             HStack(alignment: .bottom, spacing: s(2)) {
                 ForEach(0..<4, id: \.self) { index in
                     Capsule()
-                        .fill(Palette.white)
+                        .fill(Palette.accent)
                         .frame(width: s(2), height: s(14) * (isPlaying ? Self.scale(time: time, delay: Self.delays[index]) : 0.25))
                 }
             }
@@ -332,9 +332,9 @@ struct SeekBar: View {
             let fraction = total > 0 ? min(1, max(0, current / total)) : 0
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.14)).frame(height: s(4))
-                Capsule().fill(Color.white).frame(width: max(0, width * fraction), height: s(4))
+                Capsule().fill(Palette.accent).frame(width: max(0, width * fraction), height: s(4))
                 Circle()
-                    .fill(Color.white)
+                    .fill(Palette.accent)
                     .frame(width: s(12), height: s(12))
                     .scaleEffect(dragging ? 1.3 : 1)
                     .offset(x: max(0, min(width - s(12), width * fraction - s(6))))
@@ -363,4 +363,30 @@ struct SeekBar: View {
 func formatClock(_ seconds: Double) -> String {
     let total = max(0, Int(seconds.rounded(.down)))
     return String(format: "%d:%02d", total / 60, total % 60)
+}
+
+struct LiquidGlassModifier<S: Shape>: ViewModifier {
+    let shape: S
+
+    func body(content: Content) -> some View {
+        if SoundSettings.shared.liquidGlass, #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func liquidGlass<S: Shape>(in shape: S) -> some View {
+        modifier(LiquidGlassModifier(shape: shape))
+    }
+}
+
+@MainActor
+var glassActive: Bool {
+    if #available(iOS 26.0, *) {
+        return SoundSettings.shared.liquidGlass
+    }
+    return false
 }
