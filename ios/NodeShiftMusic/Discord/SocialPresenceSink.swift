@@ -22,14 +22,21 @@ struct SocialPresenceSink: PresenceSink {
         if let cover = snapshot.cover {
             info["cover"] = cover
         }
-        if let siteId = snapshot.siteId, !siteId.isEmpty {
-            info["page"] = "https://music.nodeshift.space/track/\(siteId.replacingOccurrences(of: "site:", with: ""))"
-        }
+        info["page"] = Self.link(for: snapshot)
         return await withCheckedContinuation { continuation in
             NSMDiscordBridge.shared.publish(info) { ok, retryable, _ in
                 continuation.resume(returning: ok ? .sent : (retryable ? .failed : .rejected))
             }
         }
+    }
+
+    private static func link(for snapshot: PresenceSnapshot) -> String {
+        if let siteId = snapshot.siteId?.replacingOccurrences(of: "site:", with: ""), !siteId.isEmpty {
+            return "https://music.nodeshift.space/track/\(siteId)"
+        }
+        let query = String("\(snapshot.artist) \(snapshot.title)".trimmingCharacters(in: .whitespaces).prefix(60))
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+        return "https://music.apple.com/search?term=\(encoded)"
     }
 
     func clear() async -> PresenceResult {
