@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: http://127.0.0.1:* https://burmalda.savsis.xyz; media-src 'self' blob: http://127.0.0.1:* https://burmalda.savsis.xyz; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://localhost:*; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
+      "csp": "default-src 'self'; img-src 'self' data: blob: http://127.0.0.1:* https://burmalda.savsis.xyz; media-src 'self' blob: http://127.0.0.1:* https://burmalda.savsis.xyz https://music.nodeshift.space; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://localhost:*; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
     }
   },
   "bundle": {
