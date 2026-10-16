@@ -144,17 +144,6 @@ fn apply_word_ends(lines: &mut [LyricLine]) {
     }
 }
 
-pub fn with_timed_words(plain: Vec<LyricLine>, timed: Vec<LyricLine>) -> Vec<LyricLine> {
-    let same_shape = !timed.is_empty()
-        && timed.len() == plain.len()
-        && timed.iter().zip(&plain).all(|(a, b)| a.text == b.text && (a.time - b.time).abs() < 0.05);
-    if same_shape {
-        timed
-    } else {
-        plain
-    }
-}
-
 pub fn kind(lines: &[LyricLine]) -> LyricsKind {
     if lines.is_empty() {
         return LyricsKind::None;
