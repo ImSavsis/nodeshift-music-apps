@@ -58,6 +58,100 @@ public enum Karaoke {
         return syntheticFills(text: line.text, lineTime: line.time, nextTime: nextTime, at: time)
     }
 
+    public static let leadSeconds = 0.12
+    public static let defaultRate = 4.0
+    public static let minRate = 1.8
+    public static let maxRate = 9.5
+    public static let tightGap = 6.0
+    public static let endGap = 0.97
+    public static let maxSung = 14.0
+    public static let minSung = 0.5
+
+    private static let vowels: Set<Character> = Set("aeiouyаеёиоуыэюяіїєáàâäéèêëíìîïóòôöúùûüæœ")
+
+    private static func isMora(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3040...0x30FF, 0x3400...0x9FFF, 0xAC00...0xD7AF:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public static func wordWeight(_ word: String) -> Double {
+        var units = 0
+        var inVowel = false
+        for character in word.lowercased() {
+            if vowels.contains(character) {
+                if !inVowel {
+                    units += 1
+                }
+                inVowel = true
+            } else {
+                inVowel = false
+            }
+            if character.unicodeScalars.contains(where: isMora) {
+                units += 1
+            }
+        }
+        return Double(units > 0 ? units : 1) + 0.2
+    }
+
+    public static func lineUnits(_ text: String) -> Double {
+        text.split(whereSeparator: { $0.isWhitespace }).reduce(0) { total, word in total + wordWeight(String(word)) }
+    }
+
+    public static func calibrateRate(_ lines: [LyricLine]) -> Double {
+        var rates: [Double] = []
+        if lines.count > 1 {
+            for index in 0..<(lines.count - 1) {
+                let gap = lines[index + 1].time - lines[index].time
+                let units = lineUnits(lines[index].text)
+                if gap > 0.4 && gap <= tightGap && units >= 3 {
+                    rates.append(units / gap)
+                }
+            }
+        }
+        if rates.count < 4 {
+            return defaultRate
+        }
+        rates.sort()
+        let pick = rates[min(rates.count - 1, Int(Double(rates.count) * 0.8))]
+        return min(maxRate, max(minRate, pick))
+    }
+
+    public static func planLine(_ line: LyricLine, nextTime: Double?, rate: Double) -> [LyricWord] {
+        let parts = line.text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if parts.isEmpty {
+            return []
+        }
+        let weights = parts.map(wordWeight)
+        let total = weights.reduce(0, +)
+        let gap = nextTime.map { max(0.2, $0 - line.time) } ?? Double.infinity
+        let sung = min(gap * endGap, max(minSung, min(total / rate, maxSung)))
+        var cursor = 0.0
+        var result: [LyricWord] = []
+        for (index, part) in parts.enumerated() {
+            let start = line.time + sung * cursor / total
+            cursor += weights[index]
+            let end = line.time + sung * cursor / total
+            result.append(LyricWord(text: index == parts.count - 1 ? part : part + " ", start: start, end: end))
+        }
+        return result
+    }
+
+    public static func planLines(_ lines: [LyricLine]) -> [LyricLine] {
+        let rate = calibrateRate(lines)
+        return lines.enumerated().map { index, line in
+            if line.hasWordTiming {
+                return line
+            }
+            var planned = line
+            planned.words = planLine(line, nextTime: index + 1 < lines.count ? lines[index + 1].time : nil, rate: rate)
+            return planned
+        }
+    }
+
     public static func activeIndex(in lines: [LyricLine], at time: Double) -> Int {
         var low = 0
         var high = lines.count - 1
@@ -89,5 +183,33 @@ public enum Karaoke {
             return LineStyle(opacity: 0.38, scale: 0.93, blur: min(distance, 5) * 0.55)
         }
         return LineStyle(opacity: 0.30, scale: 0.93, blur: min(distance, 5) * 0.7)
+    }
+}
+
+public enum LyricAnimation: String, CaseIterable, Equatable, Sendable {
+    case sweep
+    case rise
+    case blur
+    case pop
+    case glow
+    case hop
+    case slide
+    case flip
+
+    public static let autoMode = "auto"
+
+    public static func resolve(mode: String, index: Int, seed: Int) -> LyricAnimation {
+        if let fixed = LyricAnimation(rawValue: mode) {
+            return fixed
+        }
+        return allCases[(index + seed) % allCases.count]
+    }
+
+    public static func seed(for text: String) -> Int {
+        var hash: UInt32 = 0
+        for unit in text.utf16 {
+            hash = hash &* 31 &+ UInt32(unit)
+        }
+        return Int(hash % UInt32(allCases.count))
     }
 }

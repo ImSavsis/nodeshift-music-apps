@@ -110,8 +110,12 @@ struct PlaylistDetailView: View {
                 ScreenScroll {
                     BackButton(action: onClose)
                     HStack(alignment: .bottom, spacing: s(16)) {
-                        CoverArt(coverName: playlist.coverName ?? tracks.first(where: { $0.coverName != nil })?.coverName)
-                            .frame(width: s(120), height: s(120))
+                        let lead = tracks.first(where: { $0.coverName != nil })
+                        CoverArt(
+                            coverName: playlist.coverName ?? lead?.coverName,
+                            motionName: playlist.coverName == nil ? lead?.motionName : nil
+                        )
+                        .frame(width: s(120), height: s(120))
                         VStack(alignment: .leading, spacing: s(4)) {
                             Text(playlist.name)
                                 .font(.nsm(.unboundedSemibold, s(20)))

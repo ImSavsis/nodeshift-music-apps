@@ -1,4 +1,5 @@
 import SwiftUI
+import NSMCore
 
 struct SettingToggle: View {
     let title: String
@@ -123,6 +124,23 @@ struct SettingsView: View {
                     isOn: Binding(get: { settings.discordPresence }, set: { settings.setDiscordPresence($0) })
                 )
                 DiscordLinkRow()
+                VStack(alignment: .leading, spacing: s(10)) {
+                    Eyebrow(text: "Анимация текста", bottom: 0)
+                    FlowLayout(spacing: s(8), lineSpacing: s(8)) {
+                        Chip(title: "Авто", active: settings.lyricAnimation == LyricAnimation.autoMode) {
+                            settings.setLyricAnimation(LyricAnimation.autoMode)
+                        }
+                        ForEach(LyricAnimation.allCases, id: \.self) { value in
+                            Chip(title: value.title, active: settings.lyricAnimation == value.rawValue) {
+                                settings.setLyricAnimation(value.rawValue)
+                            }
+                        }
+                    }
+                    Text("Авто: у каждой строки своя анимация, они сменяют друг друга")
+                        .font(.nsm(.interRegular, s(12.5)))
+                        .foregroundStyle(Palette.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text("Если в iPhone включён режим уменьшения движения, анимации отключаются системой.")
                     .font(.nsm(.interRegular, s(12)))
                     .foregroundStyle(Palette.dim)

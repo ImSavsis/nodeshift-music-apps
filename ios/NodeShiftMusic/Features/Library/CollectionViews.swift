@@ -142,7 +142,11 @@ struct PlaylistsView: View {
                         openOverlay(.playlist(playlist.id))
                     } label: {
                         VStack(alignment: .leading, spacing: s(12)) {
-                            CoverArt(coverName: playlist.coverName ?? tracks.first(where: { $0.coverName != nil })?.coverName)
+                            let lead = tracks.first(where: { $0.coverName != nil })
+                            CoverArt(
+                                coverName: playlist.coverName ?? lead?.coverName,
+                                motionName: playlist.coverName == nil ? lead?.motionName : nil
+                            )
                             VStack(alignment: .leading, spacing: s(2)) {
                                 Text(playlist.name)
                                     .font(.nsm(.interMedium, s(14)))
@@ -170,7 +174,8 @@ struct PlaylistsView: View {
                             }
                         } label: {
                             VStack(alignment: .leading, spacing: s(12)) {
-                                CoverArt(coverName: album.tracks.first(where: { $0.coverName != nil })?.coverName)
+                                let lead = album.tracks.first(where: { $0.coverName != nil })
+                                CoverArt(coverName: lead?.coverName, motionName: lead?.motionName)
                                 VStack(alignment: .leading, spacing: s(2)) {
                                     Text(album.name)
                                         .font(.nsm(.interMedium, s(14)))

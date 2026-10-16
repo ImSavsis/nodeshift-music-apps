@@ -5,6 +5,7 @@ struct KaraokeWord: View {
     let text: String
     let fill: Double
     let size: CGFloat
+    var animation: LyricAnimation = .sweep
 
     static func maskStops(fill: Double) -> [Gradient.Stop] {
         let head = fill * 1.18 - 0.18
@@ -33,6 +34,14 @@ struct KaraokeWord: View {
         let label = Text(text)
             .font(.nsm(.unboundedSemibold, size))
             .tracking(-0.015 * size)
+        if animation == .sweep {
+            sweep(label)
+        } else {
+            styled(label)
+        }
+    }
+
+    private func sweep(_ label: Text) -> some View {
         label
             .foregroundStyle(Color.white.opacity(fill >= 1 ? 1 : 0.34))
             .overlay {
@@ -49,6 +58,34 @@ struct KaraokeWord: View {
                 }
             }
     }
+
+    @ViewBuilder
+    private func styled(_ label: Text) -> some View {
+        let wave = sin(fill * .pi)
+        let rest = 1 - fill
+        let base = label.foregroundStyle(Color.white)
+        switch animation {
+        case .rise:
+            base.opacity(0.3 + 0.7 * fill).offset(y: rest * 0.34 * size)
+        case .blur:
+            base.opacity(0.34 + 0.66 * fill).blur(radius: rest * 0.14 * size)
+        case .pop:
+            base.opacity(0.36 + 0.64 * fill).scaleEffect(1 + 0.09 * wave, anchor: UnitPoint(x: 0.5, y: 0.7))
+        case .glow:
+            base.opacity(0.36 + 0.64 * fill).shadow(color: Color.white.opacity(0.9 * wave), radius: 0.35 * size * wave)
+        case .hop:
+            base.opacity(0.36 + 0.64 * fill).offset(y: -0.22 * size * wave)
+        case .slide:
+            base.opacity(0.3 + 0.7 * fill)
+                .offset(x: -rest * 0.14 * size)
+                .transformEffect(CGAffineTransform(a: 1, b: 0, c: -tan(rest * 12 * .pi / 180), d: 1, tx: 0, ty: 0))
+        case .flip:
+            base.opacity(0.3 + 0.7 * fill)
+                .rotation3DEffect(.degrees(rest * 85), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.5)
+        case .sweep:
+            sweep(label)
+        }
+    }
 }
 
 struct KaraokeLineView: View {
@@ -56,6 +93,7 @@ struct KaraokeLineView: View {
     let nextTime: Double?
     let index: Int
     let active: Int
+    var animation: LyricAnimation = .sweep
     var onTap: () -> Void
     @Environment(PlayerStore.self) private var player
     @Environment(\.s) private var s
@@ -101,7 +139,7 @@ struct KaraokeLineView: View {
         let list = items
         if index == active {
             TimelineView(.animation) { context in
-                let time = player.time(at: context.date)
+                let time = player.time(at: context.date) + Karaoke.leadSeconds
                 let fills = Karaoke.fills(for: line, nextTime: nextTime, at: time)
                 flow(list, fills: fills)
             }
@@ -116,7 +154,8 @@ struct KaraokeLineView: View {
                 KaraokeWord(
                     text: list[position].text,
                     fill: position < fills.count ? fills[position] : 0,
-                    size: fontSize
+                    size: fontSize,
+                    animation: index == active ? animation : .sweep
                 )
                 .flowSpacingAfter(list[position].spaceAfter ? fontSize * 0.3 : 0)
             }
@@ -130,6 +169,7 @@ struct LyricsPane: View {
     @Environment(\.s) private var s
     @State private var activeIndex = -1
     @State private var userScrollUntil = Date.distantPast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         switch state {
@@ -194,8 +234,11 @@ struct LyricsPane: View {
         .scrollIndicators(.hidden)
     }
 
-    private func synced(_ lines: [LyricLine]) -> some View {
-        GeometryReader { proxy in
+    private func synced(_ source: [LyricLine]) -> some View {
+        let lines = Karaoke.planLines(source)
+        let mode = reduceMotion ? LyricAnimation.sweep.rawValue : SoundSettings.shared.lyricAnimation
+        let seed = LyricAnimation.seed(for: lines.first?.text ?? "")
+        return GeometryReader { proxy in
             ScrollViewReader { reader in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -206,7 +249,8 @@ struct LyricsPane: View {
                                 line: lines[index],
                                 nextTime: index + 1 < lines.count ? lines[index + 1].time : nil,
                                 index: index,
-                                active: activeIndex
+                                active: activeIndex,
+                                animation: LyricAnimation.resolve(mode: mode, index: index, seed: seed)
                             ) {
                                 player.seek(to: lines[index].time)
                             }
@@ -231,7 +275,7 @@ struct LyricsPane: View {
                 )
                 .background {
                     TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                        let index = Karaoke.activeIndex(in: lines, at: player.time(at: context.date))
+                        let index = Karaoke.activeIndex(in: lines, at: player.time(at: context.date) + Karaoke.leadSeconds)
                         Color.clear
                             .onChange(of: index) { _, newValue in
                                 activeIndex = newValue
@@ -250,7 +294,7 @@ struct LyricsPane: View {
                     }
                 )
                 .onAppear {
-                    activeIndex = Karaoke.activeIndex(in: lines, at: player.time(at: Date()))
+                    activeIndex = Karaoke.activeIndex(in: lines, at: player.time(at: Date()) + Karaoke.leadSeconds)
                 }
             }
         }

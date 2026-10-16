@@ -154,4 +154,42 @@ final class LyricsTests: XCTestCase {
         XCTAssertTrue(LyricsVerifier.isGarbled("   "))
         XCTAssertFalse(LyricsVerifier.isGarbled("Is it really you? I can't tell"))
     }
+
+    func testPacingLearnsTheSongTempo() {
+        let fast = (0..<10).map { LyricLine(time: Double($0) * 2, text: "one two three four five six seven eight") }
+        let slow = (0..<10).map { LyricLine(time: Double($0) * 5, text: "one two three four") }
+        XCTAssertGreaterThan(Karaoke.calibrateRate(fast), Karaoke.calibrateRate(slow))
+        XCTAssertEqual(Karaoke.calibrateRate([LyricLine(time: 0, text: "a b c")]), 4)
+        XCTAssertEqual(Karaoke.wordWeight("hello"), 2.2, accuracy: 1e-9)
+        XCTAssertEqual(Karaoke.wordWeight("батя"), 2.2, accuracy: 1e-9)
+        XCTAssertEqual(Karaoke.wordWeight("さくら"), 3.2, accuracy: 1e-9)
+    }
+
+    func testPlannedWordsStopBeforeTheNextLineAndStayContiguous() {
+        var lines = (0..<8).map { LyricLine(time: Double($0) * 3, text: "we are walking down the road") }
+        lines.append(LyricLine(time: 30, text: "we are walking down the road"))
+        lines.append(LyricLine(time: 42, text: "the end"))
+        let planned = Karaoke.planLines(lines)
+        let words = planned[8].words ?? []
+        XCTAssertEqual(words.first?.start ?? 0, 30, accuracy: 1e-9)
+        XCTAssertLessThan(words.last?.end ?? 99, 36)
+        XCTAssertGreaterThan(words.last?.end ?? 0, 31)
+        for index in 1..<words.count {
+            XCTAssertEqual(words[index].start, words[index - 1].end, accuracy: 1e-9)
+        }
+        XCTAssertTrue(words[0].text.hasSuffix(" "))
+        XCTAssertFalse(words[words.count - 1].text.hasSuffix(" "))
+    }
+
+    func testRealWordTimingIsKept() {
+        let real = LyricLine(time: 1, text: "a b", words: [LyricWord(text: "a ", start: 1, end: 1.2), LyricWord(text: "b", start: 1.4, end: 1.9)])
+        let planned = Karaoke.planLines([real, LyricLine(time: 5, text: "c")])
+        XCTAssertEqual(planned[0], real)
+    }
+
+    func testAnimationsCycleAndHonourAFixedChoice() {
+        let picked = (0..<LyricAnimation.allCases.count).map { LyricAnimation.resolve(mode: "auto", index: $0, seed: 3) }
+        XCTAssertEqual(Set(picked).count, LyricAnimation.allCases.count)
+        XCTAssertEqual(LyricAnimation.resolve(mode: "glow", index: 5, seed: 99), .glow)
+    }
 }

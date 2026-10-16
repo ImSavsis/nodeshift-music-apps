@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import NSMCore
 import Observation
 
 enum StreamQuality: String, CaseIterable, Sendable {
@@ -21,6 +22,25 @@ enum StreamQuality: String, CaseIterable, Sendable {
         case .lossless: return "Оригинал без потерь (FLAC и т.д.) везде"
         case .compact: return "AAC 192 кбит/с: стартует сразу, мало трафика"
         }
+    }
+}
+
+extension LyricAnimation {
+    var title: String {
+        switch self {
+        case .sweep: return "Заливка"
+        case .rise: return "Всплытие"
+        case .blur: return "Фокус"
+        case .pop: return "Пульс"
+        case .glow: return "Свечение"
+        case .hop: return "Прыжок"
+        case .slide: return "Слайд"
+        case .flip: return "Флип"
+        }
+    }
+
+    static func title(forMode mode: String) -> String {
+        LyricAnimation(rawValue: mode)?.title ?? "Авто"
     }
 }
 
@@ -82,11 +102,13 @@ final class SoundSettings {
     private(set) var discordPresence: Bool
     private(set) var accent: Accent
     private(set) var liquidGlass: Bool
+    private(set) var lyricAnimation: String
 
     private init() {
         discordPresence = UserDefaults.standard.object(forKey: "nsm_discord_presence") as? Bool ?? true
         accent = Accent(rawValue: UserDefaults.standard.string(forKey: "nsm_accent") ?? "") ?? .silver
         liquidGlass = UserDefaults.standard.object(forKey: "nsm_liquid_glass") as? Bool ?? true
+        lyricAnimation = UserDefaults.standard.string(forKey: "nsm_lyric_animation") ?? LyricAnimation.autoMode
         let defaults = UserDefaults.standard
         streamQuality = StreamQuality(rawValue: defaults.string(forKey: "nsm_stream_quality") ?? "") ?? .auto
         atmosMode = AtmosMode(rawValue: defaults.string(forKey: "nsm_atmos_mode") ?? "") ?? .auto
@@ -123,6 +145,11 @@ final class SoundSettings {
     func setLiquidGlass(_ value: Bool) {
         liquidGlass = value
         UserDefaults.standard.set(value, forKey: "nsm_liquid_glass")
+    }
+
+    func setLyricAnimation(_ value: String) {
+        lyricAnimation = value
+        UserDefaults.standard.set(value, forKey: "nsm_lyric_animation")
     }
 
     func setDiscordPresence(_ value: Bool) {
