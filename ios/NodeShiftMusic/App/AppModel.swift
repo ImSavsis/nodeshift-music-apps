@@ -103,6 +103,7 @@ final class AppModel {
             }
         }
         if !demo {
+            LockedMediaServer.shared.start()
             let remote = RemoteEngine()
             remote.onError = { message in
                 toast.show("Не удалось воспроизвести: \(message)")

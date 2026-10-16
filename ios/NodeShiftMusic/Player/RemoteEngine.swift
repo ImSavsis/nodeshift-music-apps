@@ -51,11 +51,22 @@ final class RemoteEngine: NSObject, PlaybackEngine {
     }
 
     private func source(for track: TrackRecord, compact: Bool) -> URL? {
+        if track.isLocked {
+            guard let site = track.siteId else { return nil }
+            let kind = track.fileName.hasSuffix(".nlac") ? "lossless" : "lossy"
+            return LockedMediaServer.shared.url("file/\(site)/\(kind)/\(track.fileName)")
+        }
         if !track.isRemote {
             return track.fileURL
         }
         if compact {
             return track.streamURL ?? track.losslessURL
+        }
+        if let site = track.siteId {
+            let original = SoundSettings.shared.wantsLossless() && AudioFormats.lossless.contains(track.format.lowercased())
+            if let protected = LockedMediaServer.shared.url("site/\(site)/\(original ? "lossless" : "lossy")") {
+                return protected
+            }
         }
         if SoundSettings.shared.wantsLossless(), let original = track.losslessURL {
             return original

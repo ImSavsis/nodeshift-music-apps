@@ -1,4 +1,5 @@
 import Foundation
+import NSMCore
 import Security
 
 enum Keychain {
@@ -592,6 +593,17 @@ final class SiteAPI: @unchecked Sendable {
             return mediaBase.appendingPathComponent("stream").appendingPathComponent(stream)
         }
         return mediaBase.appendingPathComponent("tracks").appendingPathComponent(track.filename)
+    }
+
+    func lockedURL(_ name: String) -> URL {
+        mediaBase.appendingPathComponent("locked").appendingPathComponent(name)
+    }
+
+    func licenses(exchange: LicenseExchange, items: [(UInt32, LockedKind)], offline: Bool) async throws -> LicenseWire {
+        let wanted: [[String: Any]] = items.map { ["track_id": Int($0.0), "kind": $0.1.name] }
+        let body: [String: Any] = ["client_pub": exchange.publicBase64, "items": wanted, "offline": offline]
+        let data = try await authorizedData("/api/music/license", method: "POST", body: body)
+        return try JSONDecoder().decode(LicenseWire.self, from: data)
     }
 
     func coverURL(_ name: String) -> URL {

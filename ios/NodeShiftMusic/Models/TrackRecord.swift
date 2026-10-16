@@ -44,6 +44,10 @@ struct TrackRecord: Identifiable, Hashable, Codable, Sendable {
         streamURL != nil
     }
 
+    var isLocked: Bool {
+        fileName.hasSuffix(".nlac") || fileName.hasSuffix(".np3")
+    }
+
     var durationSeconds: Double {
         Double(durationMs) / 1000
     }

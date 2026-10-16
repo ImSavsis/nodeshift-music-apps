@@ -212,7 +212,15 @@ final class SiteSync {
     }
 
     private func download(_ remote: SiteTrack) async throws -> TrackRecord {
-        let url = api.audioURL(remote, lossless: lossless)
+        let wanted: LockedKind = lossless ? .lossless : .lossy
+        let grant: LockedGrant
+        do {
+            grant = try await LicenseVault.shared.grant(siteID: remote.id.value, kind: wanted, offline: true)
+        } catch {
+            guard wanted == .lossless else { throw error }
+            grant = try await LicenseVault.shared.grant(siteID: remote.id.value, kind: .lossy, offline: true)
+        }
+        let url = api.lockedURL(grant.name)
         let ext = url.pathExtension.lowercased()
         let id = UUID().uuidString
         let fileName = "\(id).\(ext)"
@@ -246,22 +254,14 @@ final class SiteSync {
                 motionName = local
             }
         }
-        let tags = await Task.detached(priority: .utility) { TagIO.read(destination) }.value
 
         var track = TrackRecord.blank(id: id)
         track.title = remote.title
         track.artist = remote.artist
         track.album = remote.album
-        track.trackNumber = tags?.trackNumber
-        track.discNumber = tags?.discNumber
-        track.year = tags?.year
-        track.genre = tags?.genre
-        let seconds = remote.durationSeconds ?? tags?.duration ?? 0
+        let seconds = remote.durationSeconds ?? 0
         track.durationMs = Int((seconds * 1000).rounded())
         track.format = (remote.format ?? ext).lowercased()
-        track.bitrateKbps = tags?.bitrateKbps
-        track.sampleRate = tags?.sampleRate
-        track.bitDepth = tags?.bitDepth
         track.fileName = fileName
         track.fileSize = copied.size
         track.fileHash = copied.hash

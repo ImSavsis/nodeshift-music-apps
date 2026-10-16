@@ -181,7 +181,7 @@ enum AudioFormats {
 
 extension TrackRecord {
     var usesSystemDecoder: Bool {
-        !isRemote && AudioFormats.systemDecoded.contains(format.lowercased())
+        isLocked || (!isRemote && AudioFormats.systemDecoded.contains(format.lowercased()))
     }
 
     var isDolbyAtmos: Bool {
