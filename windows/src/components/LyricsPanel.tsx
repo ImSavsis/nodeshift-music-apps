@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { MicOff, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
-import { activeIndex as findActiveIndex, fills, splitWords } from '../lib/karaoke';
+import { ANIMATIONS, LEAD_SECONDS, activeIndex as findActiveIndex, animationFor, hashOf, planLines, splitWords, timedFills } from '../lib/karaoke';
 import { usePlayerStore } from '../store/player';
+import { useUiStore } from '../store/ui';
+import { LyricAnimationPicker } from './LyricAnimationPicker';
 import type { LyricLine, Lyrics, Track } from '../lib/types';
 
 interface LyricsPanelProps {
@@ -35,6 +37,8 @@ export function LyricsPanel({ track, className = '' }: LyricsPanelProps) {
   const wordRefs = useRef<Array<Array<HTMLSpanElement | null>>>([]);
   const userScrollUntil = useRef(0);
   const requestSeek = usePlayerStore((state) => state.requestSeek);
+  const animationMode = useUiStore((state) => state.lyricAnimation);
+  const animationSeed = hashOf(trackId) % ANIMATIONS.length;
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +65,7 @@ export function LyricsPanel({ track, className = '' }: LyricsPanelProps) {
     };
   }, [trackId, siteId]);
 
-  const lines = lyrics && lyrics.state === 'synced' ? lyrics.lines : null;
+  const lines = useMemo(() => (lyrics && lyrics.state === 'synced' ? planLines(lyrics.lines) : null), [lyrics]);
   const rendered = useMemo(() => (lines ?? []).map(renderWords), [lines]);
 
   useEffect(() => {
@@ -73,17 +77,20 @@ export function LyricsPanel({ track, className = '' }: LyricsPanelProps) {
     function tick() {
       if (!lines) return;
       const { currentTime, timeStamp, isPlaying } = usePlayerStore.getState();
-      const time = currentTime + (isPlaying ? (performance.now() - timeStamp) / 1000 : 0);
+      const time = currentTime + (isPlaying ? (performance.now() - timeStamp) / 1000 : 0) + LEAD_SECONDS;
       const index = findActiveIndex(lines, time);
 
       if (index !== lastIndex) {
         lastIndex = index;
         setActiveIndex(index);
+        for (let row = 0; row < lines.length; row += 1) {
+          const settled = row < index ? '1' : '0';
+          wordRefs.current[row]?.forEach((node) => node?.style.setProperty('--f', settled));
+        }
       }
 
       if (index >= 0) {
-        const nextTime = index + 1 < lines.length ? lines[index + 1].time : null;
-        const values = fills(lines[index], nextTime, time);
+        const values = timedFills(lines[index].words ?? [], time);
         const nodes = wordRefs.current[index];
         if (nodes) {
           for (let i = 0; i < values.length; i += 1) nodes[i]?.style.setProperty('--f', values[i].toFixed(3));
@@ -133,7 +140,9 @@ export function LyricsPanel({ track, className = '' }: LyricsPanelProps) {
 
   if (lines && lines.length > 0) {
     return (
-      <div ref={containerRef} onWheel={pauseAutoScroll} onPointerDown={pauseAutoScroll} className={`lyrics-scroll relative overflow-y-auto ${className}`}>
+      <div className={`relative ${className}`}>
+        <LyricAnimationPicker />
+        <div ref={containerRef} onWheel={pauseAutoScroll} onPointerDown={pauseAutoScroll} className="lyrics-scroll relative h-full w-full overflow-y-auto">
         <div className="px-1 py-[34vh]">
           <div className={`lyric-dots ${activeIndex === -1 ? 'is-on' : ''}`} aria-hidden>
             <span />
@@ -149,6 +158,7 @@ export function LyricsPanel({ track, className = '' }: LyricsPanelProps) {
                   lineRefs.current[index] = element;
                 }}
                 data-state={state}
+                data-anim={animationFor(animationMode, index, animationSeed)}
                 style={{ '--d': Math.abs(index - activeIndex) } as CSSProperties}
                 onClick={() => requestSeek(line.time)}
                 className="lyric-line"
@@ -170,6 +180,7 @@ export function LyricsPanel({ track, className = '' }: LyricsPanelProps) {
               </p>
             );
           })}
+        </div>
         </div>
       </div>
     );

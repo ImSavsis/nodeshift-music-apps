@@ -118,6 +118,24 @@ fn enhanced_lrc_word_timing() {
 }
 
 #[test]
+fn timed_words_replace_plain_lines_only_when_they_match() {
+    let plain = lrc::parse("[00:12.00]Hello big world
+[00:15.00]second line");
+    let timed = lrc::parse("[00:12.00]<00:12.10>Hello <00:12.40><00:12.50>big <00:12.90><00:13.20>world<00:14.00>
+[00:15.00]second line");
+    let merged = lrc::with_timed_words(plain.clone(), timed.clone());
+    assert!(merged[0].words.is_some());
+    assert!((merged[0].words.as_ref().unwrap()[0].end - 12.4).abs() < 1e-9);
+    assert_eq!(lrc::kind(&merged), LyricsKind::Line);
+
+    let moved = lrc::parse("[00:13.00]<00:13.10>Hello <00:13.40><00:13.50>big <00:13.90><00:14.20>world<00:15.00>
+[00:15.00]second line");
+    assert!(lrc::with_timed_words(plain.clone(), moved)[0].words.is_none());
+    assert!(lrc::with_timed_words(plain.clone(), timed[..1].to_vec())[0].words.is_none());
+    assert!(lrc::with_timed_words(plain, Vec::new())[0].words.is_none());
+}
+
+#[test]
 fn lrc_offset() {
     let lines = lrc::parse("[offset:+500]\n[00:10.00]line");
     assert!((lines[0].time - 9.5).abs() < 1e-9);

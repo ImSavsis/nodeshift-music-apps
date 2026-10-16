@@ -1,6 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { activeIndex, driftSeed, fills, lineStyle, syntheticFills, timedFills } from './karaoke';
+import {
+  ANIMATIONS,
+  activeIndex,
+  animationFor,
+  calibrateRate,
+  driftSeed,
+  fills,
+  lineStyle,
+  lineUnits,
+  planLine,
+  planLines,
+  syntheticFills,
+  timedFills,
+  wordWeight
+} from './karaoke';
 import type { LyricLine } from './types';
 
 function vector<T>(name: string): T {
@@ -90,5 +104,70 @@ describe('cover drift seeds', () => {
       expect(got.originY).toBe(item.originY);
       expect(got.sheenDelay).toBe(item.sheenDelay);
     }
+  });
+});
+
+describe('per-song word pacing', () => {
+  function song(texts: string[], gap: number, startAt = 0): LyricLine[] {
+    return texts.map((text, index) => ({ time: startAt + index * gap, text, words: null }));
+  }
+
+  it('counts syllables for latin, cyrillic and kana words', () => {
+    expect(wordWeight('hello')).toBeCloseTo(2.2, 9);
+    expect(wordWeight('батя')).toBeCloseTo(2.2, 9);
+    expect(wordWeight('sh')).toBeCloseTo(1.2, 9);
+    expect(wordWeight('さくら')).toBeCloseTo(3.2, 9);
+    expect(lineUnits('')).toBe(0);
+  });
+
+  it('learns a faster pace from lines that are packed tightly', () => {
+    const fast = song(Array(10).fill('one two three four five six seven eight'), 2);
+    const slow = song(Array(10).fill('one two three four'), 5);
+    expect(calibrateRate(fast)).toBeGreaterThan(calibrateRate(slow));
+    expect(calibrateRate(song(['a b c'], 2))).toBe(4);
+  });
+
+  it('stops the sweep before a long pause instead of stretching over it', () => {
+    const lines: LyricLine[] = [
+      ...song(Array(8).fill('we are walking down the road'), 3),
+      { time: 30, text: 'we are walking down the road', words: null },
+      { time: 42, text: 'the end', words: null }
+    ];
+    const rate = calibrateRate(lines);
+    const words = planLine(lines[8], 42, rate);
+    const last = words[words.length - 1];
+    expect(last.end).toBeLessThan(36);
+    expect(last.end).toBeGreaterThan(31);
+    expect(words[0].start).toBe(30);
+  });
+
+  it('never runs past the next line and keeps words contiguous', () => {
+    const lines = song(['alpha beta gamma delta epsilon zeta eta theta'], 1);
+    lines.push({ time: 1.5, text: 'next', words: null });
+    const planned = planLines(lines);
+    const words = planned[0].words ?? [];
+    expect(words[words.length - 1].end).toBeLessThanOrEqual(1.5);
+    for (let index = 1; index < words.length; index += 1) {
+      expect(words[index].start).toBeCloseTo(words[index - 1].end, 9);
+    }
+    expect(words[0].text.endsWith(' ')).toBe(true);
+    expect(words[words.length - 1].text.endsWith(' ')).toBe(false);
+  });
+
+  it('keeps real word timing untouched', () => {
+    const real: LyricLine = { time: 1, text: 'a b', words: [{ text: 'a ', start: 1, end: 1.2 }, { text: 'b', start: 1.4, end: 1.9 }] };
+    expect(planLines([real, { time: 5, text: 'c', words: null }])[0]).toBe(real);
+  });
+});
+
+describe('animation variety', () => {
+  it('cycles through every style so neighbouring lines differ', () => {
+    const picked = Array.from({ length: ANIMATIONS.length }, (_, index) => animationFor('auto', index, 3));
+    expect(new Set(picked).size).toBe(ANIMATIONS.length);
+    expect(animationFor('auto', 0, 0)).not.toBe(animationFor('auto', 1, 0));
+  });
+
+  it('honours a fixed choice', () => {
+    expect(animationFor('glow', 5, 99)).toBe('glow');
   });
 });

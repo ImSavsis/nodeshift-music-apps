@@ -869,7 +869,8 @@ impl Engine {
             return LyricsDto::None;
         };
         if let Some(text) = found.synced.as_deref().filter(|text| !text.is_empty()) {
-            let lines = lrc::parse(text);
+            let timed = found.words.as_deref().filter(|text| !text.is_empty()).map(lrc::parse).unwrap_or_default();
+            let lines = lrc::with_timed_words(lrc::parse(text), timed);
             if !lines.is_empty() {
                 let kind = lrc::kind(&lines);
                 return LyricsDto::Synced { lines, source: found.source.clone(), kind };

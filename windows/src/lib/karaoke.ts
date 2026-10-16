@@ -59,6 +59,86 @@ export function fills(line: LyricLine, nextTime: number | null, at: number): num
   return syntheticFills(line.text, line.time, nextTime, at);
 }
 
+export const LEAD_SECONDS = 0.12;
+export const DEFAULT_RATE = 4;
+export const MIN_RATE = 1.8;
+export const MAX_RATE = 9.5;
+export const TIGHT_GAP = 6;
+export const END_GAP = 0.97;
+export const MAX_SUNG = 14;
+export const MIN_SUNG = 0.5;
+
+const VOWEL_GROUP = /[aeiouyаеёиоуыэюяіїєáàâäéèêëíìîïóòôöúùûüæœ]+/giu;
+const MORA = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/gu;
+
+export function wordWeight(word: string): number {
+  const units = (word.match(VOWEL_GROUP)?.length ?? 0) + (word.match(MORA)?.length ?? 0);
+  return (units > 0 ? units : 1) + 0.2;
+}
+
+export function lineUnits(text: string): number {
+  return splitWords(text).reduce((total, word) => total + wordWeight(word), 0);
+}
+
+export function calibrateRate(lines: LyricLine[]): number {
+  const rates: number[] = [];
+  for (let index = 0; index + 1 < lines.length; index += 1) {
+    const gap = lines[index + 1].time - lines[index].time;
+    const units = lineUnits(lines[index].text);
+    if (gap > 0.4 && gap <= TIGHT_GAP && units >= 3) rates.push(units / gap);
+  }
+  if (rates.length < 4) return DEFAULT_RATE;
+  rates.sort((left, right) => left - right);
+  const pick = rates[Math.min(rates.length - 1, Math.floor(rates.length * 0.8))];
+  return Math.min(MAX_RATE, Math.max(MIN_RATE, pick));
+}
+
+export function planLine(line: LyricLine, nextTime: number | null, rate: number): LyricWord[] {
+  const parts = splitWords(line.text);
+  if (parts.length === 0) return [];
+  const weights = parts.map(wordWeight);
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  const gap = nextTime === null ? Number.POSITIVE_INFINITY : Math.max(0.2, nextTime - line.time);
+  const sung = Math.min(gap * END_GAP, Math.max(MIN_SUNG, Math.min(total / rate, MAX_SUNG)));
+  let cursor = 0;
+  return parts.map((part, index) => {
+    const start = line.time + (sung * cursor) / total;
+    cursor += weights[index];
+    const end = line.time + (sung * cursor) / total;
+    return { text: index === parts.length - 1 ? part : `${part} `, start, end };
+  });
+}
+
+export function planLines(lines: LyricLine[]): LyricLine[] {
+  const rate = calibrateRate(lines);
+  return lines.map((line, index) => {
+    if (line.words && line.words.length > 0) return line;
+    const next = index + 1 < lines.length ? lines[index + 1].time : null;
+    return { ...line, words: planLine(line, next, rate) };
+  });
+}
+
+export const ANIMATIONS = ['sweep', 'rise', 'blur', 'pop', 'glow', 'hop', 'slide', 'flip'] as const;
+export type LyricAnimation = (typeof ANIMATIONS)[number];
+export type LyricAnimationMode = 'auto' | LyricAnimation;
+
+export const ANIMATION_LABELS: Record<LyricAnimationMode, string> = {
+  auto: 'Авто',
+  sweep: 'Заливка',
+  rise: 'Всплытие',
+  blur: 'Фокус',
+  pop: 'Пульс',
+  glow: 'Свечение',
+  hop: 'Прыжок',
+  slide: 'Слайд',
+  flip: 'Флип'
+};
+
+export function animationFor(mode: LyricAnimationMode, index: number, seed: number): LyricAnimation {
+  if (mode !== 'auto') return mode;
+  return ANIMATIONS[(index + seed) % ANIMATIONS.length];
+}
+
 export function activeIndex(lines: LyricLine[], at: number): number {
   let low = 0;
   let high = lines.length - 1;

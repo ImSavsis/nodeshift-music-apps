@@ -116,6 +116,7 @@ pub struct SiteLyrics {
     pub synced: Option<String>,
     pub plain: Option<String>,
     pub source: Option<String>,
+    pub words: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

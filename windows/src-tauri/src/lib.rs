@@ -1,3 +1,4 @@
+mod chrome;
 mod secure;
 mod tray;
 
@@ -389,7 +390,9 @@ fn open_main_window(app: &AppHandle, visible: bool) -> tauri::Result<Option<Webv
             "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port} --remote-allow-origins=* --disable-gpu"
         ));
     }
-    Ok(Some(builder.build()?))
+    let window = builder.build()?;
+    chrome::paint_title_bar(&window);
+    Ok(Some(window))
 }
 
 fn install_panic_log() {
