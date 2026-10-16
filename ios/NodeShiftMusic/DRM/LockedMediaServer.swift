@@ -146,9 +146,9 @@ final class LockedMediaServer: @unchecked Sendable {
         }
     }
 
-    private static func send(_ connection: NWConnection, _ data: Data) async throws {
+    private static func send(_ connection: NWConnection, _ data: Data, final: Bool = false) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: data, completion: .contentProcessed { error in
+            connection.send(content: data, contentContext: final ? .finalMessage : .defaultMessage, isComplete: final, completion: .contentProcessed { error in
                 if let error {
                     continuation.resume(throwing: error)
                 } else {
@@ -160,12 +160,12 @@ final class LockedMediaServer: @unchecked Sendable {
 
     private static func redirect(_ connection: NWConnection, to target: URL) async {
         let head = "HTTP/1.1 307 Temporary Redirect\r\nLocation: \(target.absoluteString)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        try? await send(connection, Data(head.utf8))
+        try? await send(connection, Data(head.utf8), final: true)
     }
 
     private static func status(_ connection: NWConnection, _ line: String) async {
         let head = "HTTP/1.1 \(line)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        try? await send(connection, Data(head.utf8))
+        try? await send(connection, Data(head.utf8), final: true)
     }
 
     private func handle(_ connection: NWConnection) async {
@@ -217,10 +217,11 @@ final class LockedMediaServer: @unchecked Sendable {
             head += "Content-Range: bytes \(start)-\(end)/\(total)\r\n"
         }
         head += "\r\n"
-        guard (try? await Self.send(connection, Data(head.utf8))) != nil else {
+        let isHead = request.method == "HEAD"
+        guard (try? await Self.send(connection, Data(head.utf8), final: isHead)) != nil else {
             return
         }
-        if request.method == "HEAD" {
+        if isHead {
             return
         }
         let size = UInt64(stream.header.chunkSize)
@@ -228,7 +229,7 @@ final class LockedMediaServer: @unchecked Sendable {
         while cursor <= end {
             let last = min(end, (cursor / size + Self.batchChunks) * size - 1)
             guard let data = try? await stream.batch(start: cursor, end: last),
-                  (try? await Self.send(connection, data)) != nil else {
+                  (try? await Self.send(connection, data, final: last == end)) != nil else {
                 return
             }
             cursor = last + 1
