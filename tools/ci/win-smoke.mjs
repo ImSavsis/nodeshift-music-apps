@@ -281,7 +281,7 @@ try {
     () => page.evaluate(`(() => { const a = document.querySelector('audio'); return a && !a.error && a.currentTime > 1 ? { t: a.currentTime, src: a.currentSrc.slice(0, 40), muted: a.muted } : null; })()`),
     60_000
   );
-  check('catalog track plays through the local decrypting server', Boolean(streamed) && String(streamed.src).includes('/site/'), JSON.stringify(streamed));
+  check('catalog track plays through the local decrypting server', Boolean(streamed) && String(streamed.src).startsWith('http://127.0.0.1:'), JSON.stringify(streamed));
   check('streamed audio stays muted', streamed?.muted === true);
   await page.evaluate("document.querySelector('[aria-label=\"Развернуть плеер\"]').click()");
   await until('full player for the streamed track', () => page.evaluate("Boolean(document.querySelector('.np'))"), 15_000);
