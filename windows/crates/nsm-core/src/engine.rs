@@ -173,6 +173,7 @@ struct Inner {
     import: Mutex<ImportState>,
     run_lock: tokio::sync::Mutex<()>,
     site: Site,
+    vault: crate::drm::Vault,
     site_state: Mutex<SiteState>,
     palettes: Mutex<HashMap<String, Vec<[u8; 3]>>>,
     lossless: Mutex<bool>,
@@ -221,6 +222,7 @@ impl Engine {
         let db = Db::open(&config.paths.database)?;
         let http = net::client();
         let limiter = RateLimiter::shared();
+        let vault = crate::drm::Vault::new(config.tokens.clone());
         let site = Site::new(http.clone(), config.tokens);
         let catalog = match config.catalog {
             CatalogSource::None => None,
@@ -237,6 +239,7 @@ impl Engine {
             import: Mutex::new(ImportState::default()),
             run_lock: tokio::sync::Mutex::new(()),
             site,
+            vault,
             site_state: Mutex::new(SiteState {
                 user: None,
                 busy: false,
@@ -258,6 +261,32 @@ impl Engine {
 
     pub fn paths(&self) -> &Paths {
         &self.inner.paths
+    }
+
+    pub fn vault(&self) -> &crate::drm::Vault {
+        &self.inner.vault
+    }
+
+    pub async fn grant(&self, site_id: &str, kind: u8, offline: bool) -> Result<crate::drm::Grant> {
+        let track_id: u32 = site_id.parse()?;
+        if let Some(found) = self.inner.vault.lookup(track_id, kind, offline) {
+            return Ok(found);
+        }
+        let exchange = crate::drm::Exchange::random();
+        let license = self.inner.site.licenses(&exchange, &[(track_id, kind)], offline).await?;
+        let grants = exchange.open(&license)?;
+        for grant in &grants {
+            self.inner.vault.remember(grant);
+        }
+        grants.into_iter().find(|grant| grant.kind == kind).ok_or_else(|| anyhow::anyhow!("no license for this track"))
+    }
+
+    pub async fn grant_for_playback(&self, site_id: &str, kind: u8) -> Result<crate::drm::Grant> {
+        let track_id: u32 = site_id.parse()?;
+        if let Some(found) = self.inner.vault.playable(track_id, kind) {
+            return Ok(found);
+        }
+        self.grant(site_id, kind, false).await
     }
 
     pub fn db(&self) -> &Db {
@@ -1280,14 +1309,17 @@ impl Engine {
     }
 
     async fn download_site_track(&self, remote: &SiteTrack) -> Result<Track> {
-        let lossless = self.lossless_now();
-        let url = site::audio_url(remote, lossless);
-        let source_name = if !lossless && remote.stream_filename.is_some() { remote.stream_filename.clone().unwrap_or_default() } else { remote.filename.clone() };
-        let extension = source_name.rsplit('.').next().map(|value| value.to_lowercase()).filter(|value| value.len() <= 5).unwrap_or_else(|| "mp3".into());
+        let wanted = if self.lossless_now() { crate::drm::KIND_LOSSLESS } else { crate::drm::KIND_LOSSY };
+        let grant = match self.grant(&remote.id, wanted, true).await {
+            Ok(found) => found,
+            Err(_) if wanted == crate::drm::KIND_LOSSLESS => self.grant(&remote.id, crate::drm::KIND_LOSSY, true).await?,
+            Err(error) => return Err(error),
+        };
+        let extension = grant.name.rsplit('.').next().map(|value| value.to_lowercase()).unwrap_or_else(|| "np3".into());
         let id = Uuid::new_v4().to_string();
         let file_name = format!("{id}.{extension}");
         let destination = self.inner.paths.track_file(&file_name);
-        net::download(&self.inner.http, &url, &destination, None).await?;
+        net::download(&self.inner.http, &site::locked_url(&grant.name), &destination, None).await?;
         let hash_path = destination.clone();
         let hash = tokio::task::spawn_blocking(move || import_support::hash_file(&hash_path)).await??;
         let cover_name = match &remote.cover_filename {

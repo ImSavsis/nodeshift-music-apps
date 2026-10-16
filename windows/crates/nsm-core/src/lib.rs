@@ -4,6 +4,7 @@ pub mod autostart;
 pub mod bridge;
 pub mod db;
 pub mod discord_ipc;
+pub mod drm;
 pub mod engine;
 pub mod import_support;
 pub mod media_server;

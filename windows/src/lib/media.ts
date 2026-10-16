@@ -30,7 +30,11 @@ function remoteCover(name: string, full: boolean): string {
 
 export const media = {
   track(track: Track): string {
-    if (track.streamUrl) return track.streamUrl.startsWith('mock:') ? mockTrackUrl(track.id, track.durationMs) : track.streamUrl;
+    if (track.streamUrl) {
+      if (track.streamUrl.startsWith('mock:')) return mockTrackUrl(track.id, track.durationMs);
+      if (track.siteId && base && !isMock()) return `${base}/site/${encodeURIComponent(track.siteId)}`;
+      return track.streamUrl;
+    }
     if (isMock()) return mockTrackUrl(track.id, track.durationMs);
     return `${base}/track/${encodeURIComponent(track.id)}`;
   },
