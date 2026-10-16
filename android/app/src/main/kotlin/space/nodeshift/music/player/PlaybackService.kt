@@ -5,12 +5,14 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import space.nodeshift.music.MainActivity
 import space.nodeshift.music.NsmApp
 import space.nodeshift.music.R
+import space.nodeshift.music.drm.NsmDataSourceFactory
 
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
@@ -18,6 +20,7 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(NsmDataSourceFactory(this)))
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

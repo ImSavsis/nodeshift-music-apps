@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import space.nodeshift.music.core.DuplicateIndex
 import space.nodeshift.music.core.DuplicateKind
+import space.nodeshift.music.core.LockedKind
 import space.nodeshift.music.core.TrackFingerprint
 import space.nodeshift.music.data.AppDatabase
 import space.nodeshift.music.data.AppPaths
@@ -15,8 +16,8 @@ import space.nodeshift.music.data.LyricsRecord
 import space.nodeshift.music.data.PlaylistRecord
 import space.nodeshift.music.data.Prefs
 import space.nodeshift.music.data.TrackRecord
+import space.nodeshift.music.drm.LicenseVault
 import space.nodeshift.music.imports.FileHasher
-import space.nodeshift.music.imports.TagIO
 import space.nodeshift.music.net.Net
 import java.io.File
 import java.util.UUID
@@ -198,9 +199,15 @@ class SiteSync(
     }
 
     private suspend fun download(remote: SiteTrack): TrackRecord {
-        val url = SiteApi.audioUrl(remote, lossless)
-        val source = if (!lossless && remote.streamFilename != null) remote.streamFilename else remote.filename
-        val ext = source.substringAfterLast('.', "mp3").lowercase()
+        val wanted = if (lossless) LockedKind.LOSSLESS else LockedKind.LOSSY
+        val grant = try {
+            LicenseVault.grant(remote.id.value, wanted, true)
+        } catch (error: Exception) {
+            if (wanted == LockedKind.LOSSY) throw error
+            LicenseVault.grant(remote.id.value, LockedKind.LOSSY, true)
+        }
+        val url = SiteApi.lockedUrl(grant.name)
+        val ext = grant.name.substringAfterLast('.', "np3").lowercase()
         val id = UUID.randomUUID().toString()
         val fileName = "$id.$ext"
         val destination = AppPaths.trackFile(fileName)
@@ -208,21 +215,14 @@ class SiteSync(
         val hash = withContext(Dispatchers.IO) { FileHasher.hash(destination) }
         val coverName = remote.coverFilename?.let { fetchCover(it) }
         val motionName = remote.motionFilename?.let { fetchMotion(it) }
-        val tags = withContext(Dispatchers.IO) { TagIO.read(destination) }
-        val seconds = remote.durationSeconds ?: tags?.duration ?: 0.0
+        val seconds = remote.durationSeconds ?: 0.0
         val track = TrackRecord(
             id = id,
             title = remote.title,
             artist = remote.artist,
             album = remote.album,
-            trackNumber = tags?.trackNumber,
-            discNumber = tags?.discNumber,
-            year = tags?.year,
-            genre = tags?.genre,
             durationMs = Math.round(seconds * 1000).toInt(),
             format = (remote.format ?: ext).lowercase(),
-            bitrateKbps = tags?.bitrateKbps,
-            sampleRate = tags?.sampleRate,
             fileName = fileName,
             fileSize = destination.length(),
             fileHash = hash,

@@ -19,6 +19,10 @@ import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import space.nodeshift.music.core.LicenseExchange
+import space.nodeshift.music.core.LicenseWire
+import space.nodeshift.music.core.LicenseWireItem
+import space.nodeshift.music.core.LockedKind
 import space.nodeshift.music.core.PresenceOutcome
 import space.nodeshift.music.core.PresencePolicy
 import space.nodeshift.music.data.Prefs
@@ -153,6 +157,21 @@ data class SiteLyrics(val synced: String? = null, val plain: String? = null, val
 @Serializable
 data class SiteRoomCreated(val code: String)
 
+@Serializable
+data class SiteLicenseItem(
+    val trackId: Long,
+    val kind: String,
+    val keyId: Long,
+    val name: String,
+    val codec: String,
+    val plainLength: Long,
+    val nonce: String,
+    val wrapped: String,
+)
+
+@Serializable
+data class SiteLicense(val serverPub: String, val expiresAt: Long, val items: List<SiteLicenseItem> = emptyList())
+
 class SiteException(val kind: Kind, val code: Int = 0) : Exception(kind.name) {
     enum class Kind { Cancelled, NoToken, BadCallback, Unauthorized, Server }
 }
@@ -246,6 +265,49 @@ object SiteApi {
         throw SiteException(SiteException.Kind.Unauthorized)
     }
 
+    private suspend fun authorizedPost(path: String, body: String): String {
+        var token = access ?: refreshAccess()
+        for (attempt in 0 until 2) {
+            Net.execute(Net.postJson("$BASE$path", body, mapOf("Authorization" to "Bearer $token"))).use { response ->
+                if (response.code == 401 && attempt == 0) {
+                    token = refreshAccess()
+                    return@use
+                }
+                if (!response.isSuccessful) {
+                    throw SiteException(if (response.code == 401) SiteException.Kind.Unauthorized else SiteException.Kind.Server, response.code)
+                }
+                return response.body.string()
+            }
+        }
+        throw SiteException(SiteException.Kind.Unauthorized)
+    }
+
+    suspend fun licenses(exchange: LicenseExchange, items: List<Pair<Long, LockedKind>>, offline: Boolean): LicenseWire {
+        val body = buildJsonObject {
+            put("client_pub", exchange.publicBase64)
+            put("offline", offline)
+            put(
+                "items",
+                kotlinx.serialization.json.buildJsonArray {
+                    for ((trackId, kind) in items) {
+                        add(
+                            buildJsonObject {
+                                put("track_id", trackId)
+                                put("kind", kind.label)
+                            },
+                        )
+                    }
+                },
+            )
+        }
+        val wire = json.decodeFromString<SiteLicense>(authorizedPost("/api/music/license", body.toString()))
+        return LicenseWire(
+            wire.serverPub,
+            wire.expiresAt,
+            wire.items.map { LicenseWireItem(it.trackId, it.kind, it.keyId, it.name, it.codec, it.plainLength, it.nonce, it.wrapped) },
+        )
+    }
+
     suspend fun me(): SiteUser = json.decodeFromString(authorized("/api/auth/me"))
 
     suspend fun favorites(): List<SiteTrack> = json.decodeFromString(authorized("/api/music/favorites"))
@@ -297,6 +359,8 @@ object SiteApi {
         if (!lossless && stream != null) return media("stream", stream)
         return media("tracks", track.filename)
     }
+
+    fun lockedUrl(name: String): String = media("locked", name)
 
     fun coverUrl(name: String): String = media("covers", name)
 

@@ -37,6 +37,9 @@ data class TrackRecord(
     val isRemote: Boolean
         get() = streamUrl != null
 
+    val isLocked: Boolean
+        get() = fileName.endsWith(".nlac") || fileName.endsWith(".np3")
+
     val durationSeconds: Double
         get() = durationMs / 1000.0
 

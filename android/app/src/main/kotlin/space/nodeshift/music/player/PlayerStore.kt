@@ -23,6 +23,7 @@ import space.nodeshift.music.data.AppPaths
 import space.nodeshift.music.data.LibraryStore
 import space.nodeshift.music.data.TrackRecord
 import space.nodeshift.music.design.CoverSource
+import space.nodeshift.music.drm.LockedDataSource
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 import kotlin.math.min
@@ -190,6 +191,14 @@ class PlayerStore(
 
     fun positionMs(): Long = max(0L, controller?.currentPosition ?: 0L)
 
+    private fun playbackUri(track: TrackRecord): Uri {
+        val site = track.siteId
+        if (track.isLocked && site != null) return LockedDataSource.file(site, track.fileName)
+        val streamUrl = track.streamUrl ?: return Uri.fromFile(track.file)
+        if (site != null) return LockedDataSource.site(site, false)
+        return Uri.parse(streamUrl)
+    }
+
     private fun mediaItem(track: TrackRecord): MediaItem {
         val streamUrl = track.streamUrl
         if (streamUrl != null) remote[track.id] = track
@@ -211,7 +220,7 @@ class PlayerStore(
             .build()
         return MediaItem.Builder()
             .setMediaId(track.id)
-            .setUri(if (streamUrl != null) Uri.parse(streamUrl) else Uri.fromFile(track.file))
+            .setUri(playbackUri(track))
             .setMediaMetadata(metadata)
             .build()
     }
