@@ -172,9 +172,20 @@ private class RoutingDataSource(private val fallback: DataSource, private val lo
     }
 
     override fun open(dataSpec: DataSpec): Long {
-        val chosen = if (dataSpec.uri.scheme == LockedDataSource.SCHEME) locked else fallback
-        active = chosen
-        return chosen.open(dataSpec)
+        if (dataSpec.uri.scheme != LockedDataSource.SCHEME) {
+            active = fallback
+            return fallback.open(dataSpec)
+        }
+        try {
+            active = locked
+            return locked.open(dataSpec)
+        } catch (error: IOException) {
+            locked.close()
+            val track = dataSpec.uri.pathSegments.firstOrNull()
+            if (dataSpec.uri.host != "site" || track == null) throw error
+            active = fallback
+            return fallback.open(dataSpec.buildUpon().setUri(Uri.parse(SiteApi.previewUrl(track))).build())
+        }
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int = (active ?: throw IOException("the source is closed")).read(buffer, offset, length)

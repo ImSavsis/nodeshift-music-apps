@@ -448,6 +448,10 @@ pub fn audio_url(track: &SiteTrack, lossless: bool) -> String {
     media("tracks", &track.filename)
 }
 
+pub fn preview_url(track_id: &str) -> String {
+    format!("{BASE}/api/music/preview/{track_id}")
+}
+
 pub fn locked_url(name: &str) -> String {
     media("locked", name)
 }

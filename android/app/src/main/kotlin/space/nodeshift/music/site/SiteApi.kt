@@ -362,6 +362,8 @@ object SiteApi {
 
     fun lockedUrl(name: String): String = media("locked", name)
 
+    fun previewUrl(trackId: String): String = "$BASE/api/music/preview/$trackId"
+
     fun coverUrl(name: String): String = media("covers", name)
 
     fun thumbUrl(name: String): String = media("thumbs", name.substringBeforeLast('.') + ".webp")

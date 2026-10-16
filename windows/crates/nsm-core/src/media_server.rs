@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
 use tower::ServiceExt;
@@ -199,7 +199,7 @@ async fn site_track(State(state): State<AppState>, Path((token, site_id)): Path<
             let origin = Origin::Remote(site::locked_url(&grant.name));
             serve_locked(state.engine.clone(), origin, grant, headers).await
         }
-        Err(_) => StatusCode::FORBIDDEN.into_response(),
+        Err(_) => Redirect::temporary(&site::preview_url(&site_id)).into_response(),
     }
 }
 

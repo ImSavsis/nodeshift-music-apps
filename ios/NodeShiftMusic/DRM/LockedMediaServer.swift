@@ -158,6 +158,11 @@ final class LockedMediaServer: @unchecked Sendable {
         }
     }
 
+    private static func redirect(_ connection: NWConnection, to target: URL) async {
+        let head = "HTTP/1.1 307 Temporary Redirect\r\nLocation: \(target.absoluteString)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        try? await send(connection, Data(head.utf8))
+    }
+
     private static func status(_ connection: NWConnection, _ line: String) async {
         let head = "HTTP/1.1 \(line)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         try? await send(connection, Data(head.utf8))
@@ -178,7 +183,11 @@ final class LockedMediaServer: @unchecked Sendable {
             return
         }
         guard let stream = try? await resolve(Array(request.path.dropFirst())) else {
-            await Self.status(connection, "403 Forbidden")
+            if request.path.count >= 3, request.path[1] == "site" {
+                await Self.redirect(connection, to: SiteAPI.shared.previewURL(request.path[2]))
+            } else {
+                await Self.status(connection, "403 Forbidden")
+            }
             return
         }
         await respond(connection, stream: stream, request: request)

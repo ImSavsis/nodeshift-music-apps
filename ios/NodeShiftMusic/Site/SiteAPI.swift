@@ -595,6 +595,10 @@ final class SiteAPI: @unchecked Sendable {
         return mediaBase.appendingPathComponent("tracks").appendingPathComponent(track.filename)
     }
 
+    func previewURL(_ trackID: String) -> URL {
+        base.appendingPathComponent("api").appendingPathComponent("music").appendingPathComponent("preview").appendingPathComponent(trackID)
+    }
+
     func lockedURL(_ name: String) -> URL {
         mediaBase.appendingPathComponent("locked").appendingPathComponent(name)
     }

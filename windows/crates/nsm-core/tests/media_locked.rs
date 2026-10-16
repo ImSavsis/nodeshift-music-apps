@@ -105,3 +105,12 @@ async fn the_wrong_token_gets_nothing() {
     let response = reqwest::get(format!("http://127.0.0.1:{}/wrong/track/t1", setup.server.port)).await.unwrap();
     assert_eq!(response.status().as_u16(), 404);
 }
+
+#[tokio::test]
+async fn a_site_track_without_a_session_redirects_to_the_public_preview() {
+    let setup = setup(false).await;
+    let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().unwrap();
+    let response = client.get(format!("{}/site/42", setup.server.base())).send().await.unwrap();
+    assert_eq!(response.status().as_u16(), 307);
+    assert_eq!(response.headers()["location"], "https://music.nodeshift.space/api/music/preview/42");
+}
