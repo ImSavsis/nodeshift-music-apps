@@ -2921,6 +2921,7 @@ dependencies = [
  "futures-util",
  "hex",
  "hkdf",
+ "hmac",
  "image",
  "lofty",
  "p256",

@@ -14,6 +14,7 @@ function isMock(): boolean {
 }
 
 const SITE_MEDIA = 'https://burmalda.savsis.xyz';
+const LOSSLESS = new Set(['flac', 'wav', 'alac', 'aiff', 'aif', 'ape', 'wv']);
 const REMOTE_PREFIX = 'remote:';
 
 export function isRemoteCover(name: string): boolean {
@@ -32,7 +33,7 @@ export const media = {
   track(track: Track): string {
     if (track.streamUrl) {
       if (track.streamUrl.startsWith('mock:')) return mockTrackUrl(track.id, track.durationMs);
-      if (track.siteId && base && !isMock()) return `${base}/site/${encodeURIComponent(track.siteId)}`;
+      if (track.siteId && base && !isMock()) return `${base}/site/${encodeURIComponent(track.siteId)}${LOSSLESS.has(track.format.toLowerCase()) ? '?q=lossless' : ''}`;
       return track.streamUrl;
     }
     if (isMock()) return mockTrackUrl(track.id, track.durationMs);

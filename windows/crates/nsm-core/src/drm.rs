@@ -6,11 +6,14 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use anyhow::{anyhow, bail, Result};
 use base64::Engine as _;
 use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
 use p256::ecdh::diffie_hellman;
+use p256::ecdsa::signature::Signer;
+use p256::ecdsa::{Signature, SigningKey};
 use p256::elliptic_curve::sec1::ToEncodedPoint;
 use p256::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 use crate::net::site::TokenStore;
 
@@ -312,4 +315,76 @@ impl Vault {
 
 pub fn is_locked_name(name: &str) -> bool {
     name.ends_with(".nlac") || name.ends_with(".np3")
+}
+
+include!(concat!(env!("OUT_DIR"), "/app_secret.rs"));
+
+pub const PLATFORM: &str = "win";
+
+fn secret_text() -> Option<String> {
+    if MASKED.is_empty() {
+        return None;
+    }
+    let mut state = SEED;
+    let bytes: Vec<u8> = MASKED
+        .iter()
+        .map(|byte| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            byte ^ ((state >> 24) as u8)
+        })
+        .collect();
+    String::from_utf8(bytes).ok()
+}
+
+pub fn can_prove_app() -> bool {
+    !MASKED.is_empty()
+}
+
+pub fn proof_with(secret: &[u8], stamp: u64, subject: &str) -> Option<String> {
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret).ok()?;
+    mac.update(format!("NSM-APP|{PLATFORM}|{stamp}|{subject}").as_bytes());
+    Some(format!("{PLATFORM}.{stamp}.{}", hex::encode(mac.finalize().into_bytes())))
+}
+
+pub fn app_proof(subject: &str, stamp: u64) -> Option<String> {
+    proof_with(&hex::decode(secret_text()?).ok()?, stamp, subject)
+}
+
+pub struct Device {
+    key: SigningKey,
+}
+
+impl Device {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(Self { key: SigningKey::from_slice(bytes).map_err(|_| anyhow!("bad device key"))? })
+    }
+
+    pub fn from_store(store: &dyn TokenStore) -> Self {
+        if let Some(device) = store.get("device_key").and_then(|text| hex::decode(text).ok()).and_then(|bytes| Self::from_bytes(&bytes).ok()) {
+            return device;
+        }
+        let key = SigningKey::random(&mut OsRng);
+        store.set("device_key", &hex::encode(key.to_bytes()));
+        Self { key }
+    }
+
+    pub fn public_bytes(&self) -> Vec<u8> {
+        self.key.verifying_key().to_encoded_point(false).as_bytes().to_vec()
+    }
+
+    pub fn public_b64(&self) -> String {
+        base64::engine::general_purpose::STANDARD.encode(self.public_bytes())
+    }
+
+    pub fn id(&self) -> String {
+        hex::encode(Sha256::digest(self.public_bytes()))[..32].to_string()
+    }
+
+    pub fn sign(&self, stamp: u64, subject: &str) -> String {
+        let id = self.id();
+        let signature: Signature = self.key.sign(format!("NSM-DEV|{id}|{stamp}|{subject}").as_bytes());
+        format!("{id}.{stamp}.{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+    }
 }

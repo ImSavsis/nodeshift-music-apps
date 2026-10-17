@@ -39,3 +39,33 @@ async fn a_site_track_streams_through_the_local_decrypting_server() {
     assert_eq!(middle.status().as_u16(), 206);
     assert_eq!(middle.bytes().await.unwrap().as_ref(), &body[100000..101000]);
 }
+
+#[tokio::test]
+#[ignore]
+async fn a_flac_track_needs_the_proven_app_and_streams_as_lossless() {
+    use nsm_core::drm::KIND_LOSSLESS;
+    assert!(nsm_core::drm::can_prove_app(), "build this test with NSM_APP_SECRET set");
+    let access = std::env::var("NSM_TEST_ACCESS").unwrap();
+    let site_id = std::env::var("NSM_TEST_FLAC").unwrap();
+    let expected = std::env::var("NSM_TEST_FLAC_SHA256").unwrap();
+    let length: usize = std::env::var("NSM_TEST_FLAC_LENGTH").unwrap().parse().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let tokens = Arc::new(MemoryTokenStore::default());
+    tokens.set("access", &access);
+    let engine = Engine::new(EngineConfig {
+        paths: Paths::new(dir.path()).unwrap(),
+        catalog: CatalogSource::None,
+        tokens,
+        emit: Arc::new(|_| {}),
+        runtime: tokio::runtime::Handle::current(),
+    })
+    .unwrap();
+    let grant = engine.grant(&site_id, KIND_LOSSLESS, false).await.unwrap();
+    assert_eq!(grant.kind, KIND_LOSSLESS);
+    assert_eq!(grant.plain_length as usize, length);
+    let server = media_server::start(engine).await.unwrap();
+    let url = format!("{}/site/{}?q=lossless", server.base(), site_id);
+    let body = reqwest::Client::new().get(&url).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(body.len(), length);
+    assert_eq!(hex::encode(Sha256::digest(&body)), expected);
+}

@@ -246,14 +246,18 @@ impl Site {
         self.authorized_with(path, reqwest::Method::GET).await
     }
 
-    async fn authorized_json(&self, path: &str, body: &Value) -> Result<String> {
+    async fn authorized_json(&self, path: &str, body: &Value, extra: &[(&str, String)]) -> Result<String> {
         let existing = self.access.lock().ok().and_then(|value| value.clone());
         let mut token = match existing {
             Some(token) => token,
             None => self.refresh_access().await?,
         };
         for attempt in 0..2 {
-            let response = self.http.post(Self::url(path)).bearer_auth(&token).json(body).send().await?;
+            let mut request = self.http.post(Self::url(path)).bearer_auth(&token).json(body);
+            for (name, value) in extra {
+                request = request.header(*name, value);
+            }
+            let response = request.send().await?;
             let status = response.status();
             if status.as_u16() == 401 && attempt == 0 {
                 token = self.refresh_access().await?;
@@ -267,10 +271,16 @@ impl Site {
         Err(SiteError::Unauthorized.into())
     }
 
-    pub async fn licenses(&self, exchange: &crate::drm::Exchange, items: &[(u32, u8)], offline: bool) -> Result<crate::drm::WireLicense> {
+    pub async fn register_device(&self, public_b64: &str, name: &str, proof: &str) -> Result<()> {
+        let body = serde_json::json!({ "public_key": public_b64, "name": name, "platform": crate::drm::PLATFORM });
+        self.authorized_json("/api/music/devices", &body, &[("X-NSM-App", proof.to_string())]).await?;
+        Ok(())
+    }
+
+    pub async fn licenses(&self, exchange: &crate::drm::Exchange, items: &[(u32, u8)], offline: bool, extra: &[(&str, String)]) -> Result<crate::drm::WireLicense> {
         let wanted: Vec<Value> = items.iter().map(|(track_id, kind)| serde_json::json!({ "track_id": track_id, "kind": crate::drm::kind_name(*kind) })).collect();
         let body = serde_json::json!({ "client_pub": exchange.public_b64(), "items": wanted, "offline": offline });
-        Ok(serde_json::from_str(&self.authorized_json("/api/music/license", &body).await?)?)
+        Ok(serde_json::from_str(&self.authorized_json("/api/music/license", &body, extra).await?)?)
     }
 
     async fn authorized_with(&self, path: &str, method: reqwest::Method) -> Result<String> {

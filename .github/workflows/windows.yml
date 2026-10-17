@@ -80,6 +80,7 @@ jobs:
       - name: Build installer
         env:
           NSM_BUILD: ${{ github.run_number }}
+          NSM_APP_SECRET: ${{ secrets.NSM_APP_SECRET }}
         run: npx tauri build --bundles nsis -- --locked
 
       - name: Manifest

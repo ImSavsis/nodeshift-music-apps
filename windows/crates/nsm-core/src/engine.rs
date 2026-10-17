@@ -174,6 +174,8 @@ struct Inner {
     run_lock: tokio::sync::Mutex<()>,
     site: Site,
     vault: crate::drm::Vault,
+    device: crate::drm::Device,
+    device_ready: std::sync::atomic::AtomicBool,
     site_state: Mutex<SiteState>,
     palettes: Mutex<HashMap<String, Vec<[u8; 3]>>>,
     lossless: Mutex<bool>,
@@ -223,6 +225,7 @@ impl Engine {
         let http = net::client();
         let limiter = RateLimiter::shared();
         let vault = crate::drm::Vault::new(config.tokens.clone());
+        let device = crate::drm::Device::from_store(config.tokens.as_ref());
         let site = Site::new(http.clone(), config.tokens);
         let catalog = match config.catalog {
             CatalogSource::None => None,
@@ -240,6 +243,8 @@ impl Engine {
             run_lock: tokio::sync::Mutex::new(()),
             site,
             vault,
+            device,
+            device_ready: std::sync::atomic::AtomicBool::new(false),
             site_state: Mutex::new(SiteState {
                 user: None,
                 busy: false,
@@ -273,12 +278,32 @@ impl Engine {
             return Ok(found);
         }
         let exchange = crate::drm::Exchange::random();
-        let license = self.inner.site.licenses(&exchange, &[(track_id, kind)], offline).await?;
+        let extra = if kind == crate::drm::KIND_LOSSLESS { self.lossless_headers(&exchange.public_b64()).await? } else { Vec::new() };
+        let license = self.inner.site.licenses(&exchange, &[(track_id, kind)], offline, &extra).await?;
         let grants = exchange.open(&license)?;
         for grant in &grants {
             self.inner.vault.remember(grant);
         }
         grants.into_iter().find(|grant| grant.kind == kind).ok_or_else(|| anyhow::anyhow!("no license for this track"))
+    }
+
+    pub fn wants_lossless(&self) -> bool {
+        self.lossless_now()
+    }
+
+    async fn lossless_headers(&self, subject: &str) -> Result<Vec<(&'static str, String)>> {
+        if !crate::drm::can_prove_app() {
+            anyhow::bail!("this build cannot ask for lossless");
+        }
+        let stamp = crate::drm::now_seconds();
+        if !self.inner.device_ready.load(std::sync::atomic::Ordering::Relaxed) {
+            let key = self.inner.device.public_b64();
+            let proof = crate::drm::app_proof(&key, stamp).ok_or_else(|| anyhow::anyhow!("no proof"))?;
+            self.inner.site.register_device(&key, "NS Music", &proof).await?;
+            self.inner.device_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let proof = crate::drm::app_proof(subject, stamp).ok_or_else(|| anyhow::anyhow!("no proof"))?;
+        Ok(vec![("X-NSM-App", proof), ("X-NSM-Device", self.inner.device.sign(stamp, subject))])
     }
 
     pub async fn grant_for_playback(&self, site_id: &str, kind: u8) -> Result<crate::drm::Grant> {

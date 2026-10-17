@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use anyhow::{bail, Result};
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, Request, State};
+use std::collections::HashMap;
+
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
@@ -190,11 +192,24 @@ async fn track(State(state): State<AppState>, Path((token, id)): Path<(String, S
     }
 }
 
-async fn site_track(State(state): State<AppState>, Path((token, site_id)): Path<(String, String)>, headers: HeaderMap) -> Response {
+async fn site_track(
+    State(state): State<AppState>,
+    Path((token, site_id)): Path<(String, String)>,
+    Query(options): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> Response {
     if token != state.token {
         return StatusCode::NOT_FOUND.into_response();
     }
-    match state.engine.grant(&site_id, KIND_LOSSY, false).await {
+    let granted = if options.get("q").map(String::as_str) == Some("lossless") && state.engine.wants_lossless() {
+        match state.engine.grant(&site_id, KIND_LOSSLESS, false).await {
+            Ok(found) => Ok(found),
+            Err(_) => state.engine.grant(&site_id, KIND_LOSSY, false).await,
+        }
+    } else {
+        state.engine.grant(&site_id, KIND_LOSSY, false).await
+    };
+    match granted {
         Ok(grant) => {
             let origin = Origin::Remote(site::locked_url(&grant.name));
             serve_locked(state.engine.clone(), origin, grant, headers).await

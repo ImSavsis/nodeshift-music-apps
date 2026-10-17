@@ -119,3 +119,39 @@ fn a_fresh_exchange_has_an_uncompressed_public_key() {
     assert_eq!(bytes.len(), 65);
     assert_eq!(bytes[0], 4);
 }
+
+#[test]
+fn app_proof_matches_the_server_vector() {
+    let sample = vector("trust.json");
+    let secret = hex::decode(sample["secret_hex"].as_str().unwrap()).unwrap();
+    let proof = nsm_core::drm::proof_with(&secret, sample["stamp"].as_u64().unwrap(), sample["subject"].as_str().unwrap()).unwrap();
+    assert_eq!(proof, sample["proof"].as_str().unwrap());
+}
+
+#[test]
+fn device_identity_and_signatures_match_the_server_format() {
+    use p256::ecdsa::signature::Verifier;
+    use p256::ecdsa::{Signature, VerifyingKey};
+    let sample = vector("trust.json");
+    let device = nsm_core::drm::Device::from_bytes(&hex::decode(sample["device_private_hex"].as_str().unwrap()).unwrap()).unwrap();
+    assert_eq!(device.public_b64(), sample["device_public_b64"].as_str().unwrap());
+    assert_eq!(device.id(), sample["device_id"].as_str().unwrap());
+
+    let stamp = sample["stamp"].as_u64().unwrap();
+    let subject = sample["subject"].as_str().unwrap();
+    let key = VerifyingKey::from_sec1_bytes(&device.public_bytes()).unwrap();
+    let message = format!("NSM-DEV|{}|{stamp}|{subject}", device.id());
+
+    let ours = device.sign(stamp, subject);
+    let parts: Vec<&str> = ours.split('.').collect();
+    assert_eq!(parts[0], device.id());
+    assert_eq!(parts[1], stamp.to_string());
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(parts[2]).unwrap();
+    assert_eq!(raw.len(), 64);
+    assert!(key.verify(message.as_bytes(), &Signature::from_slice(&raw).unwrap()).is_ok());
+
+    let theirs = sample["device_header"].as_str().unwrap().split('.').nth(2).unwrap().to_string();
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(theirs).unwrap();
+    assert!(key.verify(message.as_bytes(), &Signature::from_slice(&raw).unwrap()).is_ok());
+    assert!(key.verify(b"other", &Signature::from_slice(&raw).unwrap()).is_err());
+}
