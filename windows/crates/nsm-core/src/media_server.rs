@@ -122,14 +122,38 @@ impl Reader {
     }
 }
 
-async fn serve_locked(engine: Engine, origin: Origin, grant: Grant, headers: HeaderMap) -> Response {
+async fn serve_locked(engine: Engine, origin: Origin, grant: Grant, headers: HeaderMap, heal: Option<(String, u8)>) -> Response {
+    let mut origin = origin;
+    let mut grant = grant;
+    let Ok(mut header) = load_header(&engine, &origin, &grant.name).await else {
+        return StatusCode::BAD_GATEWAY.into_response();
+    };
+    if header.key_id != grant.key_id {
+        let Some((site_id, kind)) = heal else {
+            return StatusCode::CONFLICT.into_response();
+        };
+        engine.vault().forget(grant.track_id);
+        engine.vault().drop_header(&grant.name);
+        let Ok(fresh) = engine.grant(&site_id, kind, false).await else {
+            return StatusCode::FORBIDDEN.into_response();
+        };
+        if matches!(origin, Origin::Remote(_)) {
+            origin = Origin::Remote(site::locked_url(&fresh.name));
+        }
+        engine.vault().drop_header(&fresh.name);
+        grant = fresh;
+        header = match load_header(&engine, &origin, &grant.name).await {
+            Ok(reloaded) => reloaded,
+            Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
+        };
+        if header.key_id != grant.key_id {
+            return StatusCode::CONFLICT.into_response();
+        }
+    }
     let Ok(key) = grant.key() else {
         return StatusCode::FORBIDDEN.into_response();
     };
-    let Ok(header) = load_header(&engine, &origin, &grant.name).await else {
-        return StatusCode::BAD_GATEWAY.into_response();
-    };
-    if header.key_id != grant.key_id || header.plain_length == 0 {
+    if header.plain_length == 0 {
         return StatusCode::CONFLICT.into_response();
     }
     let total = header.plain_length;
@@ -187,7 +211,7 @@ async fn track(State(state): State<AppState>, Path((token, id)): Path<(String, S
         return StatusCode::FORBIDDEN.into_response();
     };
     match state.engine.grant_for_playback(&site_id, kind).await {
-        Ok(grant) => serve_locked(state.engine.clone(), Origin::File(path), grant, headers).await,
+        Ok(grant) => serve_locked(state.engine.clone(), Origin::File(path), grant, headers, None).await,
         Err(_) => StatusCode::FORBIDDEN.into_response(),
     }
 }
@@ -212,7 +236,8 @@ async fn site_track(
     match granted {
         Ok(grant) => {
             let origin = Origin::Remote(site::locked_url(&grant.name));
-            serve_locked(state.engine.clone(), origin, grant, headers).await
+            let heal = Some((site_id.clone(), grant.kind));
+            serve_locked(state.engine.clone(), origin, grant, headers, heal).await
         }
         Err(_) => Redirect::temporary(&site::preview_url(&site_id)).into_response(),
     }

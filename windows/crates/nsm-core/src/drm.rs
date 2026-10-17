@@ -306,6 +306,12 @@ impl Vault {
         self.headers.lock().ok().and_then(|map| map.get(name).cloned())
     }
 
+    pub fn drop_header(&self, name: &str) {
+        if let Ok(mut map) = self.headers.lock() {
+            map.remove(name);
+        }
+    }
+
     pub fn keep_header(&self, name: &str, header: &Header) {
         if let Ok(mut map) = self.headers.lock() {
             map.insert(name.to_string(), header.clone());

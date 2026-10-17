@@ -69,3 +69,34 @@ async fn a_flac_track_needs_the_proven_app_and_streams_as_lossless() {
     assert_eq!(body.len(), length);
     assert_eq!(hex::encode(Sha256::digest(&body)), expected);
 }
+
+#[tokio::test]
+#[ignore]
+async fn a_stale_stored_key_is_replaced_by_a_fresh_license() {
+    use nsm_core::drm::{now_seconds, Grant};
+    let access = std::env::var("NSM_TEST_ACCESS").unwrap();
+    let site_id = std::env::var("NSM_TEST_TRACK").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let tokens = Arc::new(MemoryTokenStore::default());
+    tokens.set("access", &access);
+    let engine = Engine::new(EngineConfig {
+        paths: Paths::new(dir.path()).unwrap(),
+        catalog: CatalogSource::None,
+        tokens,
+        emit: Arc::new(|_| {}),
+        runtime: tokio::runtime::Handle::current(),
+    })
+    .unwrap();
+    let good = engine.grant(&site_id, KIND_LOSSY, false).await.unwrap();
+    let server = media_server::start(engine.clone()).await.unwrap();
+    let url = format!("{}/site/{}", server.base(), site_id);
+    let client = reqwest::Client::new();
+    let first = client.get(&url).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(first.len() as u64, good.plain_length);
+
+    engine.vault().remember(&Grant { key_id: good.key_id + 40, key_hex: "11".repeat(32), expires_at: now_seconds() + 86400, ..good.clone() });
+    let healed = client.get(&url).send().await.unwrap();
+    assert_eq!(healed.status().as_u16(), 200);
+    let second = healed.bytes().await.unwrap();
+    assert_eq!(hex::encode(Sha256::digest(&second)), hex::encode(Sha256::digest(&first)));
+}
