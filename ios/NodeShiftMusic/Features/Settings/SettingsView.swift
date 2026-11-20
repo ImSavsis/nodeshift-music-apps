@@ -26,6 +26,7 @@ struct SettingToggle: View {
 struct SettingsView: View {
     var onClose: () -> Void
     @Environment(SiteSession.self) private var site
+    @Environment(PlayerStore.self) private var player
     @Environment(LibraryStore.self) private var library
     @Environment(EnrichmentService.self) private var enrichment
     @Environment(UpdateChecker.self) private var updates
@@ -90,9 +91,15 @@ struct SettingsView: View {
     }
 
     private var soundCard: some View {
-        SurfaceCard {
+        let settings = SoundSettings.shared
+        return SurfaceCard {
             VStack(alignment: .leading, spacing: s(14)) {
                 Eyebrow(text: "Звук", bottom: 0)
+                SettingToggle(
+                    title: "Автомикс",
+                    detail: "Сводит очередь по темпу и такту. Альбом подряд играет без перехода",
+                    isOn: Binding(get: { settings.autoMix }, set: { player.setAutoMix($0) })
+                )
                 SoundPicker()
                 Text("Dolby Atmos играет из файлов E-AC-3 (.m4a, .ec3), которые ты добавил на телефон. Lossless — оригиналы FLAC с сайта.")
                     .font(.nsm(.interRegular, s(12.5)))

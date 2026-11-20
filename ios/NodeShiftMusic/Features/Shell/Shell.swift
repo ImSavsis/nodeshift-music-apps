@@ -210,7 +210,7 @@ struct MiniPlayer: View {
                                 .font(.nsm(.interMedium, s(14)))
                                 .foregroundStyle(Palette.white)
                                 .lineLimit(1)
-                            Text(track.artist)
+                            Text(player.mix != nil ? "Сведение" : track.artist)
                                 .font(.nsm(.monoRegular, s(11)))
                                 .foregroundStyle(Palette.dim)
                                 .lineLimit(1)

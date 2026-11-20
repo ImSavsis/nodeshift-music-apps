@@ -56,6 +56,7 @@ struct QueueSheet: View {
                     .foregroundStyle(Palette.dim)
             }
             Spacer()
+            AutoMixToggle(size: 36, iconSize: 17)
             IconToggle(icon: .shuffle, active: player.shuffle, size: 36, iconSize: 17) {
                 player.toggleShuffle()
             }

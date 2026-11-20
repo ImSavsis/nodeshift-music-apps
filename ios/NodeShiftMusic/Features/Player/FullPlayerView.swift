@@ -217,15 +217,23 @@ struct FullPlayerView: View {
         let side = max(s(140), min(size.width * 0.84, size.height - s(310)))
         return VStack(spacing: s(22)) {
             Spacer(minLength: 0)
-            CoverArt(coverName: track?.coverName, motionName: track?.motionName, radius: Radius.card, maxPixel: 1000)
-                .frame(width: side, height: side)
-                .tiltParallax(depth: s(5), degrees: 6)
-                .scaleEffect(player.isPlaying ? 1 : 0.92)
-                .animation(Motion.coverSpring, value: player.isPlaying)
-                .shadow(color: .black.opacity(0.55), radius: s(40), y: s(30))
+            ZStack {
+                CoverArt(coverName: track?.coverName, motionName: track?.motionName, radius: Radius.card, maxPixel: 1000)
+                    .opacity(player.mix.map { 1 - $0.progress } ?? 1)
+                if let mix = player.mix {
+                    CoverArt(coverName: mix.track.coverName, motionName: mix.track.motionName, radius: Radius.card, maxPixel: 1000)
+                        .opacity(mix.progress)
+                }
+            }
+            .frame(width: side, height: side)
+            .tiltParallax(depth: s(5), degrees: 6)
+            .scaleEffect(player.isPlaying ? 1 : 0.92)
+            .animation(Motion.coverSpring, value: player.isPlaying)
+            .shadow(color: .black.opacity(0.55), radius: s(40), y: s(30))
             VStack(spacing: s(16)) {
                 titleRow(track)
                 soundRow(track)
+                mixBanner
                 progressRow
                 transport
                 actions(track)
@@ -242,6 +250,7 @@ struct FullPlayerView: View {
             Spacer(minLength: 0)
             titleRow(track)
             soundRow(track)
+            mixBanner
             progressRow
             transport
             actions(track)
@@ -249,6 +258,22 @@ struct FullPlayerView: View {
         .padding(.horizontal, s(20))
         .padding(.bottom, s(10))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var mixBanner: some View {
+        if let mix = player.mix {
+            HStack(spacing: s(6)) {
+                AutoMixIcon(size: s(13))
+                Text("СВЕДЕНИЕ · \(mix.track.title)")
+                    .lineLimit(1)
+            }
+            .font(.nsm(.monoRegular, s(10.5)))
+            .tracking(0.12 * s(10.5))
+            .foregroundStyle(Palette.dim)
+            .frame(maxWidth: .infinity)
+            .transition(.opacity)
+        }
     }
 
     private func lyricsPane(_ track: TrackRecord) -> some View {
@@ -377,8 +402,9 @@ struct FullPlayerView: View {
 
     private func actions(_ track: TrackRecord?) -> some View {
         GlassGroup(spacing: s(14)) {
-            HStack(spacing: s(22)) {
+            HStack(spacing: s(16)) {
                 if let track {
+                    AutoMixToggle(size: 42, iconSize: 19, glass: true)
                     IconToggle(icon: .heart, active: catalog.isFavorite(track), size: 42, iconSize: 19, filled: catalog.isFavorite(track), glass: true) {
                         withAnimation(Motion.spring) {
                             catalog.toggleFavorite(track, library: library)
