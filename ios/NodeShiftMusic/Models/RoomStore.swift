@@ -159,6 +159,7 @@ final class RoomStore {
         you = nil
         code = wanted
         status = .connecting
+        player?.cancelActiveMix()
         player?.endedHandler = { [weak self] in
             self?.handleLocalEnded() ?? false
         }

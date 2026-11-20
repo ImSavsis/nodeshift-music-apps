@@ -103,6 +103,7 @@ final class SoundSettings {
     private(set) var accent: Accent
     private(set) var liquidGlass: Bool
     private(set) var lyricAnimation: String
+    private(set) var autoMix: Bool
 
     private init() {
         discordPresence = UserDefaults.standard.object(forKey: "nsm_discord_presence") as? Bool ?? true
@@ -114,6 +115,7 @@ final class SoundSettings {
         atmosMode = AtmosMode(rawValue: defaults.string(forKey: "nsm_atmos_mode") ?? "") ?? .auto
         motionCovers = defaults.object(forKey: "nsm_motion_covers") as? Bool ?? true
         ambientMotion = defaults.object(forKey: "nsm_ambient_motion") as? Bool ?? true
+        autoMix = defaults.object(forKey: "nsm_automix") as? Bool ?? true
         _ = NetworkMonitor.shared
     }
 
@@ -157,6 +159,11 @@ final class SoundSettings {
         UserDefaults.standard.set(value, forKey: "nsm_discord_presence")
     }
 
+    func setAutoMix(_ value: Bool) {
+        autoMix = value
+        UserDefaults.standard.set(value, forKey: "nsm_automix")
+    }
+
     func wantsLossless() -> Bool {
         switch streamQuality {
         case .lossless: return true
@@ -177,11 +184,17 @@ enum AudioFormats {
     static let lossless: Set<String> = ["flac", "wav", "alac", "aiff", "aif", "ape", "wv"]
     static let systemDecoded: Set<String> = ["atmos", "eac3", "ac3"]
     static let systemDecodedExtensions: Set<String> = ["ec3", "eac3", "ac3"]
+    static let avNative: Set<String> = ["mp3", "m4a", "aac", "alac", "flac", "wav", "aiff", "aif", "caf", "mp4", "atmos", "eac3", "ac3"]
 }
 
 extension TrackRecord {
     var usesSystemDecoder: Bool {
         isLocked || (!isRemote && AudioFormats.systemDecoded.contains(format.lowercased()))
+    }
+
+    var supportsAVPlayer: Bool {
+        let ext = format.isEmpty ? fileURL.pathExtension.lowercased() : format.lowercased()
+        return AudioFormats.avNative.contains(ext)
     }
 
     var isDolbyAtmos: Bool {
